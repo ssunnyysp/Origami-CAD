@@ -1,25 +1,44 @@
 import { useAppStore } from "../../store/useAppStore";
 
 export function ParamSliders() {
+  const sides = useAppStore((s) => s.sides);
+  const setSides = useAppStore((s) => s.setSides);
   const rings = useAppStore((s) => s.rings);
   const setRings = useAppStore((s) => s.setRings);
-  const twistAngleDeg = useAppStore((s) => s.twistAngleDeg);
-  const setTwistAngleDeg = useAppStore((s) => s.setTwistAngleDeg);
+  const spiralAngleDeg = useAppStore((s) => s.spiralAngleDeg);
+  const setSpiralAngleDeg = useAppStore((s) => s.setSpiralAngleDeg);
+  const wrapAngleDeg = useAppStore((s) => s.wrapAngleDeg);
+  const setWrapAngleDeg = useAppStore((s) => s.setWrapAngleDeg);
   const radiusRatio = useAppStore((s) => s.radiusRatio);
   const setRadiusRatio = useAppStore((s) => s.setRadiusRatio);
   const roughness = useAppStore((s) => s.roughness);
   const setRoughness = useAppStore((s) => s.setRoughness);
   const metalness = useAppStore((s) => s.metalness);
   const setMetalness = useAppStore((s) => s.setMetalness);
+  const showCreases = useAppStore((s) => s.showCreases);
+  const setShowCreases = useAppStore((s) => s.setShowCreases);
 
   return (
     <>
+      <label className="control-row">
+        <span>Sides</span>
+        <input
+          type="range"
+          min={3}
+          max={10}
+          step={1}
+          value={sides}
+          onChange={(e) => setSides(Number(e.target.value))}
+        />
+        <span className="control-value">{sides}</span>
+      </label>
+
       <label className="control-row">
         <span>Rings</span>
         <input
           type="range"
           min={1}
-          max={6}
+          max={10}
           step={1}
           value={rings}
           onChange={(e) => setRings(Number(e.target.value))}
@@ -28,16 +47,29 @@ export function ParamSliders() {
       </label>
 
       <label className="control-row">
-        <span>Twist angle</span>
+        <span>Spiral angle</span>
         <input
           type="range"
           min={0}
-          max={90}
+          max={45}
           step={1}
-          value={twistAngleDeg}
-          onChange={(e) => setTwistAngleDeg(Number(e.target.value))}
+          value={spiralAngleDeg}
+          onChange={(e) => setSpiralAngleDeg(Number(e.target.value))}
         />
-        <span className="control-value">{twistAngleDeg}°</span>
+        <span className="control-value">{spiralAngleDeg}°</span>
+      </label>
+
+      <label className="control-row">
+        <span>Wrap per ring</span>
+        <input
+          type="range"
+          min={0}
+          max={180}
+          step={1}
+          value={wrapAngleDeg}
+          onChange={(e) => setWrapAngleDeg(Number(e.target.value))}
+        />
+        <span className="control-value">{wrapAngleDeg}°</span>
       </label>
 
       <label className="control-row">
@@ -77,6 +109,16 @@ export function ParamSliders() {
           onChange={(e) => setMetalness(Number(e.target.value))}
         />
         <span className="control-value">{metalness.toFixed(2)}</span>
+      </label>
+
+      <label className="control-row">
+        <span>Show creases</span>
+        <input
+          type="checkbox"
+          checked={showCreases}
+          onChange={(e) => setShowCreases(e.target.checked)}
+        />
+        <span className="control-value">{showCreases ? "on" : "off"}</span>
       </label>
     </>
   );

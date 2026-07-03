@@ -2,14 +2,18 @@ import { useAppStore } from "../../store/useAppStore";
 import { Scene } from "../scene/Scene";
 import { ControlPanel } from "../ui/ControlPanel";
 
+const DEG = Math.PI / 180;
+
 export function AppLayout() {
   const foldness = useAppStore((s) => s.foldness);
   const paperColor = useAppStore((s) => s.paperColor);
   const roughness = useAppStore((s) => s.roughness);
   const metalness = useAppStore((s) => s.metalness);
+  const showCreases = useAppStore((s) => s.showCreases);
   const sides = useAppStore((s) => s.sides);
   const rings = useAppStore((s) => s.rings);
-  const twistAngleDeg = useAppStore((s) => s.twistAngleDeg);
+  const spiralAngleDeg = useAppStore((s) => s.spiralAngleDeg);
+  const wrapAngleDeg = useAppStore((s) => s.wrapAngleDeg);
   const radiusRatio = useAppStore((s) => s.radiusRatio);
   const centralRadius = useAppStore((s) => s.centralRadius);
 
@@ -20,7 +24,8 @@ export function AppLayout() {
           params={{
             sides,
             rings,
-            twistAngle: (twistAngleDeg * Math.PI) / 180,
+            spiralAngle: spiralAngleDeg * DEG,
+            wrapAngle: wrapAngleDeg * DEG,
             radiusRatio,
             centralRadius,
           }}
@@ -28,6 +33,7 @@ export function AppLayout() {
           color={paperColor}
           roughness={roughness}
           metalness={metalness}
+          showCreases={showCreases}
           autoRotate
         />
       </div>

@@ -5,18 +5,22 @@ twist-fold tessellations — built with React, Three.js (`@react-three/fiber`), 
 
 ## What it does
 
-- Generates flasher crease patterns parametrically (central polygon + concentric pleat rings)
-- Animates folding live via a "foldness" slider (0 = flat, 1 = fully folded)
-- Lets you change paper color, roughness, metalness, ring count, twist angle, and ring spread
+- Generates flasher crease patterns parametrically (central polygon + spiral arms over
+  concentric rings, controlled by sides, rings, spiral angle, wrap angle, and ring spread)
+- Animates stow/deploy live via a "foldness" slider (0 = flat/deployed, 1 = wrapped/stowed)
+- Draws a CAD-style crease overlay (mountain red / valley blue / border dark), toggleable
+- Lets you change paper color, roughness, and metalness
 - Ships with 4 curated presets (square, hexagonal, triangular, octagonal flashers)
 
 ## How folding works
 
-Each ring is animated as a single rigid body: at full fold it's rotated by `ring index * twist
-angle` and lifted to its own height, and the foldness slider interpolates every ring's transform
-between flat (identity) and that folded target via lerp/slerp. This guarantees an exact,
-non-self-intersecting result at both ends of the slider; mid-fold, individual triangles aren't
-perfectly rigid (a deliberate simplification — see `src/model/foldEngine.ts`).
+Every vertex interpolates in cylindrical coordinates between the flat pattern and a wrapped
+target state where each successive ring winds `wrapAngle` further around the hub at a slightly
+larger layer radius and height. Leaving the winding angle unwrapped makes outer rings sweep
+through multiple turns, so the sheet visibly coils around the hub — the signature flasher stow
+motion. This is a kinematic visualization, not an isometric simulation: see
+`docs/FLASHER_NOTES.md` for the exact math, the approximations made, and the roadmap to a
+physically faithful model.
 
 ## Project layout
 
@@ -29,9 +33,11 @@ perfectly rigid (a deliberate simplification — see `src/model/foldEngine.ts`).
 
 ## Not yet built (future work)
 
-- Freehand crease-pattern drawing/editing
-- Import/export (e.g. the FOLD format)
-- A true per-hinge rigid-origami numeric solver (currently approximated per-ring)
+See `docs/FLASHER_NOTES.md` for the full roadmap. Highlights:
+
+- Exact zero-thickness flasher geometry (polygon-involute arms, pleated arms / Lang's height order)
+- Import/export (the FOLD format, SVG cut/score files)
+- A true per-hinge rigid-origami solver (currently a per-vertex cylindrical interpolation)
 
 ## Development
 
