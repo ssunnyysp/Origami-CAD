@@ -1,35 +1,41 @@
-# Origami-CAD
-Origami CAD model running in browser
+# Origami CAD
 
-# React + TypeScript + Vite
+A showcase viewer for parametric origami "flasher" patterns — deployable, concentric-ring
+twist-fold tessellations — built with React, Three.js (`@react-three/fiber`), and TypeScript.
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+## What it does
 
-Currently, two official plugins are available:
+- Generates flasher crease patterns parametrically (central polygon + concentric pleat rings)
+- Animates folding live via a "foldness" slider (0 = flat, 1 = fully folded)
+- Lets you change paper color, roughness, metalness, ring count, twist angle, and ring spread
+- Ships with 4 curated presets (square, hexagonal, triangular, octagonal flashers)
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## How folding works
 
-## React Compiler
+Each ring is animated as a single rigid body: at full fold it's rotated by `ring index * twist
+angle` and lifted to its own height, and the foldness slider interpolates every ring's transform
+between flat (identity) and that folded target via lerp/slerp. This guarantees an exact,
+non-self-intersecting result at both ends of the slider; mid-fold, individual triangles aren't
+perfectly rigid (a deliberate simplification — see `src/model/foldEngine.ts`).
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## Project layout
 
-## Expanding the Oxlint configuration
+- `src/model/` — crease pattern data types, the flasher generator, and the fold engine
+- `src/components/scene/` — the `@react-three/fiber` scene and per-ring/per-face rendering
+- `src/components/ui/` — control panel widgets (model selector, sliders, color picker)
+- `src/components/debug/` — a throwaway 2D SVG crease-pattern viewer used to sanity-check the
+  generator's output; not wired into the main app
+- `src/store/` — zustand store holding the active model params and view settings
 
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
+## Not yet built (future work)
 
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
+- Freehand crease-pattern drawing/editing
+- Import/export (e.g. the FOLD format)
+- A true per-hinge rigid-origami numeric solver (currently approximated per-ring)
+
+## Development
+
 ```
-
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+npm install
+npm run dev
+```
