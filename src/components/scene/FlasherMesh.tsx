@@ -1,28 +1,30 @@
 import { useEffect, useMemo } from "react";
 import * as THREE from "three";
 import type { CreasePattern } from "../../model/types";
-import type { VertexPositions } from "../../model/foldEngine";
 
 interface Props {
   pattern: CreasePattern;
-  positions: VertexPositions;
+  positions: Float32Array; // xyz triples indexed by vertex id
   color: string;
   roughness: number;
   metalness: number;
 }
 
-// One non-indexed geometry for the whole sheet, rebuilt from the fold
-// engine's interpolated vertex positions. Non-indexed so normals stay
-// per-face (flat shading), matching folded paper.
+// One non-indexed geometry for the whole sheet, rebuilt from the solver's
+// vertex positions. Non-indexed so normals stay per-face (flat shading),
+// matching folded paper.
 export function FlasherMesh({ pattern, positions, color, roughness, metalness }: Props) {
   const geometry = useMemo(() => {
     const coords: number[] = [];
     for (const face of pattern.faces) {
-      const points = face.vertexIds.map((id) => positions.get(id)!);
-      // Fan triangulation from points[0] — valid since faces are either
-      // triangles or the convex regular-n-gon central polygon.
-      for (let i = 1; i < points.length - 1; i++) {
-        coords.push(...points[0], ...points[i], ...points[i + 1]);
+      const ids = face.vertexIds;
+      // Fan triangulation from ids[0] — valid since faces are either
+      // triangles or the convex regular-n-gon central polygon. Must match
+      // the triangulation used for the solver's constraints.
+      for (let i = 1; i < ids.length - 1; i++) {
+        for (const id of [ids[0], ids[i], ids[i + 1]]) {
+          coords.push(positions[id * 3], positions[id * 3 + 1], positions[id * 3 + 2]);
+        }
       }
     }
     const geom = new THREE.BufferGeometry();

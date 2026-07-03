@@ -9,7 +9,6 @@ export function AppLayout() {
   const paperColor = useAppStore((s) => s.paperColor);
   const roughness = useAppStore((s) => s.roughness);
   const metalness = useAppStore((s) => s.metalness);
-  const showCreases = useAppStore((s) => s.showCreases);
   const sides = useAppStore((s) => s.sides);
   const rings = useAppStore((s) => s.rings);
   const spiralAngleDeg = useAppStore((s) => s.spiralAngleDeg);
@@ -33,7 +32,6 @@ export function AppLayout() {
           color={paperColor}
           roughness={roughness}
           metalness={metalness}
-          showCreases={showCreases}
           autoRotate
         />
       </div>

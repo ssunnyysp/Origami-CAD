@@ -1,7 +1,7 @@
 import { ModelSelector } from "./ModelSelector";
 import { FoldnessSlider } from "./FoldnessSlider";
+import { AnimateToggle } from "./AnimateToggle";
 import { ColorPicker } from "./ColorPicker";
-import { ParamSliders } from "./ParamSliders";
 
 export function ControlPanel() {
   return (
@@ -9,8 +9,8 @@ export function ControlPanel() {
       <h1>Origami CAD</h1>
       <ModelSelector />
       <FoldnessSlider />
+      <AnimateToggle />
       <ColorPicker />
-      <ParamSliders />
     </div>
   );
 }

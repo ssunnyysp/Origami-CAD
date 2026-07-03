@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { generateFlasher, type FlasherParams } from "../../model/flasherGenerator";
-import { computeVertexPositionsAtFoldness } from "../../model/foldEngine";
+import { FlasherFoldSolver } from "../../model/foldSolver";
 import { FlasherMesh } from "./FlasherMesh";
 import { CreaseLines } from "./CreaseLines";
 
@@ -10,25 +10,30 @@ interface Props {
   color: string;
   roughness: number;
   metalness: number;
-  showCreases: boolean;
 }
 
-export function FlasherModel({ params, foldness, color, roughness, metalness, showCreases }: Props) {
+export function FlasherModel({ params, foldness, color, roughness, metalness }: Props) {
   const { sides, rings, spiralAngle, wrapAngle, radiusRatio, centralRadius } = params;
 
-  // Topology depends only on structural params; positions also on foldness.
   const pattern = useMemo(
     () => generateFlasher({ sides, rings, spiralAngle, wrapAngle, radiusRatio, centralRadius }),
     [sides, rings, spiralAngle, wrapAngle, radiusRatio, centralRadius],
   );
-  const positions = useMemo(
+  // The solver is stateful (warm-started between foldness values); a new one
+  // is built whenever the pattern or fold parameters change.
+  const solver = useMemo(
     () =>
-      computeVertexPositionsAtFoldness(
-        { sides, rings, spiralAngle, wrapAngle, radiusRatio, centralRadius },
-        foldness,
-      ),
-    [sides, rings, spiralAngle, wrapAngle, radiusRatio, centralRadius, foldness],
+      new FlasherFoldSolver(pattern, {
+        sides,
+        rings,
+        spiralAngle,
+        wrapAngle,
+        radiusRatio,
+        centralRadius,
+      }),
+    [pattern, sides, rings, spiralAngle, wrapAngle, radiusRatio, centralRadius],
   );
+  const positions = useMemo(() => solver.positionsAt(foldness), [solver, foldness]);
 
   return (
     <>
@@ -39,7 +44,7 @@ export function FlasherModel({ params, foldness, color, roughness, metalness, sh
         roughness={roughness}
         metalness={metalness}
       />
-      {showCreases && <CreaseLines pattern={pattern} positions={positions} />}
+      <CreaseLines pattern={pattern} positions={positions} foldness={foldness} />
     </>
   );
 }
