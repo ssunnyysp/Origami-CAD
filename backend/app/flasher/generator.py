@@ -1,8 +1,22 @@
-"""Parametric flasher crease-pattern generator.
+"""Square-grid flasher crease-pattern generator (Shafer / Lang style).
 
-Port of the original frontend flasherGenerator.ts — the data model is custom
-(not the FOLD format) because patterns are generated parametrically rather
-than imported from authored files.
+The sheet is always a SQUARE, divided into an N×N unit grid around a central
+2×2 hub square. The crease structure follows the classic flasher:
+
+- The two main diagonals split the sheet into 4 triangular quadrants.
+- In each quadrant, the grid lines PARALLEL to the near sheet edge are the
+  pleat creases ("ring" lines), alternating mountain/valley by ring parity.
+- Crossing a diagonal into the next quadrant flips every ring line's gender
+  (Shafer: "every crease should get mountained and valleyed"). This
+  per-quadrant flip is what makes the collapse a spiral wrap around the hub
+  rather than a flat twist fold.
+- Every cell is split into 4 triangles by an X through its center. In cells
+  along the main diagonals the X halves are real creases (the reverse folds
+  that turn a pleat 90° around the hub corner); elsewhere they are "facet"
+  edges — triangulation only, never drawn.
+
+Grid lines perpendicular to a quadrant's pleats are "facet" too: they exist
+in the mesh but are not creases of the pattern.
 """
 
 from __future__ import annotations
@@ -10,21 +24,21 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass, field
 
+HUB_HALF = 1.0  # half-size of the central hub square, in grid units
+
 
 @dataclass(frozen=True)
 class FlasherParams:
-    sides: int  # n, sides of the central polygon / rotational symmetry order
-    rings: int  # k, concentric pleat rings around the central polygon
-    spiral_angle: float  # radians; per-ring angular offset in the FLAT pattern
-    wrap_angle: float  # radians; per-ring extra wrap around the hub when FOLDED
-    radius_ratio: float  # > 1, each ring's outer radius = inner radius * radius_ratio
-    central_radius: float  # r0, circumradius of the central polygon
+    grid_divisions: int  # N; the sheet is N×N unit cells, N even
+    wrap_per_ring: float  # square-angle sides of extra wrap per ring at full fold
+    layer_gap_ratio: float  # wall-to-wall spacing of the wrapped layers, grid units per ring
+    height_ratio: float  # stowed height gained per ring of flat material, grid units
 
 
 @dataclass
 class Vertex:
     id: int
-    position: tuple[float, float]  # flat-pattern coordinates
+    position: tuple[float, float]  # flat-pattern coordinates, sheet center at origin
 
 
 @dataclass
@@ -38,9 +52,9 @@ class Edge:
 @dataclass
 class Face:
     id: int
-    vertex_ids: list[int]  # ordered, CCW in the flat pattern
-    edge_ids: list[int]  # edges bounding this face, same winding order
-    ring_index: int  # 0 = central polygon
+    vertex_ids: list[int]  # ordered CCW in the flat pattern
+    edge_ids: list[int]  # same winding order
+    ring_index: int  # taxicab ring this face belongs to (0 = hub)
 
 
 @dataclass
@@ -50,37 +64,31 @@ class CreasePattern:
     faces: list[Face]
     adjacency: list[dict] = field(default_factory=list)
     ring_count: int = 0
-    sides: int = 0
-
-
-def flasher_vertex_id(sides: int, ring: int, sector: int) -> int:
-    """Vertex ids encode (ring, sector) so consumers can recover both."""
-    return ring * sides + sector % sides
+    sides: int = 4  # always square paper
 
 
 def generate_flasher(params: FlasherParams) -> CreasePattern:
-    n = params.sides
-    rings = params.rings
+    n = params.grid_divisions
+    if n % 2 != 0:
+        raise ValueError("grid_divisions must be even (hub sits on the center lines)")
+    m = n // 2  # coordinates run -m..m
 
-    # Ring radii: R[0] = central_radius, R[j] = R[j-1] * radius_ratio.
-    radii = [params.central_radius]
-    for _ in range(rings):
-        radii.append(radii[-1] * params.radius_ratio)
+    grid_stride = n + 1
 
-    # Each ring is rotated by j * spiral_angle relative to the hub, so the
-    # "spoke" edges connecting ring j-1 to ring j slant tangentially and chain
-    # into n discrete spiral arms — the defining feature of a flasher flat
-    # pattern (cf. Guest & Pellegrino's membrane wrap, Lang's flasher).
+    def grid_id(x: int, y: int) -> int:
+        return (y + m) * grid_stride + (x + m)
+
+    def center_id(cx: int, cy: int) -> int:
+        # cell (cx, cy) spans [cx, cx+1] × [cy, cy+1]; cx, cy in [-m, m-1]
+        return grid_stride * grid_stride + (cy + m) * n + (cx + m)
+
     vertices: list[Vertex] = []
-    for j in range(rings + 1):
-        for i in range(n):
-            angle = 2 * math.pi * i / n + j * params.spiral_angle
-            vertices.append(
-                Vertex(
-                    id=flasher_vertex_id(n, j, i),
-                    position=(radii[j] * math.cos(angle), radii[j] * math.sin(angle)),
-                )
-            )
+    for y in range(-m, m + 1):
+        for x in range(-m, m + 1):
+            vertices.append(Vertex(id=grid_id(x, y), position=(float(x), float(y))))
+    for cy in range(-m, m):
+        for cx in range(-m, m):
+            vertices.append(Vertex(id=center_id(cx, cy), position=(cx + 0.5, cy + 0.5)))
 
     edges: list[Edge] = []
     edge_id_by_key: dict[tuple[int, int], int] = {}
@@ -95,60 +103,83 @@ def generate_flasher(params: FlasherParams) -> CreasePattern:
         edges.append(Edge(id=edge_id, v0=a, v1=b, assignment=assignment))
         return edge_id
 
+    def ring_gender(ring: int, quadrant: int) -> str:
+        # Gender flips every quadrant (the spiral) and every ring (the pleats).
+        return "mountain" if (ring + quadrant) % 2 == 0 else "valley"
+
+    def horizontal_assignment(x: int, k: int) -> str:
+        """Grid segment from (x, k) to (x+1, k)."""
+        if abs(k) == m:
+            return "border"
+        # Pleat crease only where the segment lies on taxicab ring |k| — i.e.
+        # inside the top (k>0) or bottom (k<0) quadrant. Elsewhere it runs
+        # radially and is just mesh structure.
+        if k != 0 and max(abs(x), abs(x + 1)) <= abs(k):
+            return ring_gender(abs(k), 1 if k > 0 else 3)
+        return "facet"
+
+    def vertical_assignment(j: int, y: int) -> str:
+        """Grid segment from (j, y) to (j, y+1)."""
+        if abs(j) == m:
+            return "border"
+        if j != 0 and max(abs(y), abs(y + 1)) <= abs(j):
+            return ring_gender(abs(j), 0 if j > 0 else 2)
+        return "facet"
+
     faces: list[Face] = []
 
-    # Central polygon face (ring 0). Its boundary is where the wrap begins —
-    # mountain, so the arms fold up and around the hub.
-    hub_vertex_ids = [flasher_vertex_id(n, 0, i) for i in range(n)]
-    hub_edge_ids = [
-        get_or_create_edge(flasher_vertex_id(n, 0, i), flasher_vertex_id(n, 0, i + 1), "mountain")
-        for i in range(n)
-    ]
-    faces.append(Face(id=0, vertex_ids=hub_vertex_ids, edge_ids=hub_edge_ids, ring_index=0))
+    for cy in range(-m, m):
+        for cx in range(-m, m):
+            v00 = grid_id(cx, cy)
+            v10 = grid_id(cx + 1, cy)
+            v11 = grid_id(cx + 1, cy + 1)
+            v01 = grid_id(cx, cy + 1)
+            vc = center_id(cx, cy)
 
-    # Concentric pleat rings, each split into n quad sectors, each sector split
-    # into 2 triangles: T1 = (A0, A1, B0), T2 = (A1, B0, B1).
-    #
-    # Crease labeling follows the wrap geometry rather than a flat-foldability
-    # proof: the spiral spokes (A0→B0) are the primary wrap creases (mountain),
-    # the sector diagonals (A1→B0) take the counter-fold (valley), and the
-    # interior ring boundaries bend only gently in the wrapped state (facet).
-    for j in range(1, rings + 1):
-        inner_assignment = "mountain" if j == 1 else "facet"
-        outer_assignment = "border" if j == rings else "facet"
+            cell_ring = max(abs(cx + 0.5), abs(cy + 0.5))  # taxicab radius of cell center
 
-        for i in range(n):
-            a0 = flasher_vertex_id(n, j - 1, i)
-            a1 = flasher_vertex_id(n, j - 1, i + 1)
-            b0 = flasher_vertex_id(n, j, i)
-            b1 = flasher_vertex_id(n, j, i + 1)
+            # X assignments: real creases only in cells the sheet diagonals
+            # pass through (and outside the hub). The half-diagonals ON the
+            # sheet diagonal carry one gender; the crossing pair carries the
+            # opposite — the reverse-fold detail of the flasher.
+            on_main_diag = cx == cy  # sheet diagonal y = x runs v00 → vc → v11
+            on_anti_diag = cy == -cx - 1  # sheet diagonal y = -x runs v10 → vc → v01
+            main_half = cross_half = "facet"
+            if cell_ring > HUB_HALF and (on_main_diag or on_anti_diag):
+                k = int(cell_ring + 0.5)
+                diag_gender = "mountain" if k % 2 == 0 else "valley"
+                reverse_gender = "valley" if k % 2 == 0 else "mountain"
+                if on_main_diag:
+                    main_half, cross_half = diag_gender, reverse_gender
+                else:
+                    main_half, cross_half = reverse_gender, diag_gender
 
-            e_a0a1 = get_or_create_edge(a0, a1, inner_assignment)
-            e_b0b1 = get_or_create_edge(b0, b1, outer_assignment)
-            e_a0b0 = get_or_create_edge(a0, b0, "mountain")
-            e_a1b1 = get_or_create_edge(a1, b1, "mountain")
-            e_diagonal = get_or_create_edge(a1, b0, "valley")
+            e_bottom = get_or_create_edge(v00, v10, horizontal_assignment(cx, cy))
+            e_top = get_or_create_edge(v01, v11, horizontal_assignment(cx, cy + 1))
+            e_left = get_or_create_edge(v00, v01, vertical_assignment(cx, cy))
+            e_right = get_or_create_edge(v10, v11, vertical_assignment(cx + 1, cy))
+            e_00c = get_or_create_edge(v00, vc, main_half)
+            e_11c = get_or_create_edge(v11, vc, main_half)
+            e_10c = get_or_create_edge(v10, vc, cross_half)
+            e_01c = get_or_create_edge(v01, vc, cross_half)
 
-            faces.append(
-                Face(
-                    id=len(faces),
-                    vertex_ids=[a0, a1, b0],
-                    edge_ids=[e_a0a1, e_diagonal, e_a0b0],
-                    ring_index=j,
+            ring_index = int(math.ceil(cell_ring))
+            for tri_vertices, tri_edges in (
+                ([v00, v10, vc], [e_bottom, e_10c, e_00c]),
+                ([v10, v11, vc], [e_right, e_11c, e_10c]),
+                ([v11, v01, vc], [e_top, e_01c, e_11c]),
+                ([v01, v00, vc], [e_left, e_00c, e_01c]),
+            ):
+                faces.append(
+                    Face(
+                        id=len(faces),
+                        vertex_ids=tri_vertices,
+                        edge_ids=tri_edges,
+                        ring_index=ring_index,
+                    )
                 )
-            )
-            faces.append(
-                Face(
-                    id=len(faces),
-                    vertex_ids=[a1, b0, b1],
-                    edge_ids=[e_diagonal, e_b0b1, e_a1b1],
-                    ring_index=j,
-                )
-            )
 
-    # Face adjacency: any two faces sharing an edge id are neighbors. Kept in
-    # the payload so a future per-hinge rigid solver can reuse it without
-    # changing the API contract.
+    # Face adjacency: any two faces sharing an edge id are neighbors.
     faces_by_edge: dict[int, list[int]] = {}
     for face in faces:
         for edge_id in face.edge_ids:
@@ -166,6 +197,6 @@ def generate_flasher(params: FlasherParams) -> CreasePattern:
         edges=edges,
         faces=faces,
         adjacency=adjacency,
-        ring_count=rings,
-        sides=n,
+        ring_count=m,
+        sides=4,
     )

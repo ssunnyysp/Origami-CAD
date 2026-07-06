@@ -15,12 +15,10 @@ interface AppState {
   paperColor: string;
   roughness: number;
   metalness: number;
-  sides: number;
-  rings: number;
-  spiralAngleDeg: number;
-  wrapAngleDeg: number;
-  radiusRatio: number;
-  centralRadius: number;
+  gridDivisions: number;
+  wrapPerRing: number;
+  layerGapRatio: number;
+  heightRatio: number;
 
   loadPresets: () => Promise<void>;
   setFoldness: (t: number) => void;
@@ -37,12 +35,10 @@ function applyPreset(preset: FlasherPreset) {
     paperColor: preset.paperColor,
     roughness: preset.roughness,
     metalness: preset.metalness,
-    sides: preset.sides,
-    rings: preset.rings,
-    spiralAngleDeg: preset.spiralAngleDeg,
-    wrapAngleDeg: preset.wrapAngleDeg,
-    radiusRatio: preset.radiusRatio,
-    centralRadius: preset.centralRadius,
+    gridDivisions: preset.gridDivisions,
+    wrapPerRing: preset.wrapPerRing,
+    layerGapRatio: preset.layerGapRatio,
+    heightRatio: preset.heightRatio,
   };
 }
 
@@ -55,12 +51,10 @@ export const useAppStore = create<AppState>((set, get) => ({
   paperColor: "#e8dcc8",
   roughness: 0.8,
   metalness: 0.05,
-  sides: 4,
-  rings: 8,
-  spiralAngleDeg: 18,
-  wrapAngleDeg: 90,
-  radiusRatio: 1.18,
-  centralRadius: 1,
+  gridDivisions: 16,
+  wrapPerRing: 1.0,
+  layerGapRatio: 0.1,
+  heightRatio: 0.3,
 
   loadPresets: async () => {
     if (get().presets.length > 0) return;

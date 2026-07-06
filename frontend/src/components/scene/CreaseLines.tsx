@@ -2,9 +2,10 @@ import { useEffect, useMemo } from "react";
 import * as THREE from "three";
 import type { CreasePattern, CreaseAssignment } from "../../model/types";
 
+// Mountain folds up (blue), valley folds down (red).
 const CREASE_COLORS: Partial<Record<CreaseAssignment, string>> = {
-  mountain: "#d84035",
-  valley: "#3560d8",
+  mountain: "#3560d8",
+  valley: "#d84035",
   border: "#222222",
   // facet edges are triangulation artifacts, not creases — never drawn
 };

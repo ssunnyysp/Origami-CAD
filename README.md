@@ -6,12 +6,13 @@ twist-fold tessellations. A Python (FastAPI) backend owns all the geometry math;
 
 ## What it does
 
-- Generates flasher crease patterns parametrically (central polygon + spiral arms over
-  concentric rings, controlled by sides, rings, spiral angle, wrap angle, and ring spread)
+- Generates square-flasher crease patterns parametrically: a SQUARE sheet on an N×N grid
+  around a central hub, in the style of Jeremy Shafer's flashers (Big Bang = 32×32)
 - Animates stow/deploy live via a "foldness" slider (0 = flat/deployed, 1 = wrapped/stowed)
-- Draws a CAD-style crease overlay (mountain red / valley blue / border dark), toggleable
+- Draws a CAD-style crease overlay — mountain folds blue (paper folds up), valley folds red
+  (paper folds down), border dark — fading out as the model folds
 - Lets you change paper color, roughness, and metalness
-- Ships with 4 curated presets (square, hexagonal, triangular, octagonal flashers)
+- Ships with 3 curated presets (16×16 classic, 24×24 fine, 32×32 Big Bang)
 
 ## Architecture
 
@@ -35,12 +36,18 @@ API:
 
 ## How folding works
 
-Every vertex is attracted toward a kinematic target interpolated in cylindrical coordinates
-between the flat pattern and a wrapped state where each successive ring winds `wrapAngle`
-further around the hub. A position-based-dynamics pass then enforces that every triangle edge
-keeps its flat-pattern length (paper folds, it doesn't stretch), so the sheet coils around the
-hub by buckling at creases. See `docs/FLASHER_NOTES.md` for the exact math, the approximations
-made, and the roadmap to a physically faithful model.
+The crease pattern is the classic flasher structure: the sheet's two main diagonals split it
+into 4 triangular quadrants; in each quadrant the grid lines parallel to the near edge are the
+pleats, alternating mountain/valley; crossing a diagonal flips every pleat's gender (Shafer:
+"every crease should get mountained and valleyed"), which is what turns the collapse into a
+spiral wrap instead of a flat twist fold. Cells along the diagonals carry X creases — the
+reverse folds that turn a pleat 90° around the hub corner.
+
+To fold, every vertex is attracted toward a kinematic target in "square-polar" coordinates
+(taxicab radius + perimeter position) wrapping around the hub column, while a position-based
+dynamics pass enforces that every mesh edge keeps its flat-pattern length — paper folds, it
+doesn't stretch — so the sheet collapses into the compact wrapped square by pleating at the
+creases. `docs/FLASHER_NOTES.md` describes the earlier polygonal model this replaced.
 
 ## Project layout
 

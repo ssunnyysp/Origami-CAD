@@ -1,8 +1,9 @@
 import type { CreasePattern } from "../../model/types";
 
+// Mountain folds up (blue), valley folds down (red).
 const COLOR_BY_ASSIGNMENT: Record<string, string> = {
-  mountain: "#e04040",
-  valley: "#4060e0",
+  mountain: "#4060e0",
+  valley: "#e04040",
   border: "#111111",
   facet: "#999999",
 };

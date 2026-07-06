@@ -10,12 +10,10 @@ export function AppLayout() {
   const paperColor = useAppStore((s) => s.paperColor);
   const roughness = useAppStore((s) => s.roughness);
   const metalness = useAppStore((s) => s.metalness);
-  const sides = useAppStore((s) => s.sides);
-  const rings = useAppStore((s) => s.rings);
-  const spiralAngleDeg = useAppStore((s) => s.spiralAngleDeg);
-  const wrapAngleDeg = useAppStore((s) => s.wrapAngleDeg);
-  const radiusRatio = useAppStore((s) => s.radiusRatio);
-  const centralRadius = useAppStore((s) => s.centralRadius);
+  const gridDivisions = useAppStore((s) => s.gridDivisions);
+  const wrapPerRing = useAppStore((s) => s.wrapPerRing);
+  const layerGapRatio = useAppStore((s) => s.layerGapRatio);
+  const heightRatio = useAppStore((s) => s.heightRatio);
 
   useEffect(() => {
     loadPresets().catch((err) => console.error("preset load failed:", err));
@@ -28,7 +26,7 @@ export function AppLayout() {
             fixed at mount, so it must see real parameters, not placeholders. */}
         {ready && (
           <Scene
-            params={{ sides, rings, spiralAngleDeg, wrapAngleDeg, radiusRatio, centralRadius }}
+            params={{ gridDivisions, wrapPerRing, layerGapRatio, heightRatio }}
             foldness={foldness}
             color={paperColor}
             roughness={roughness}

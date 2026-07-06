@@ -4,38 +4,37 @@ types — the JSON that leaves this server is the same shape the React app's
 
 from __future__ import annotations
 
-import math
-
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from .flasher.generator import CreasePattern, FlasherParams
 
-DEG = math.pi / 180
-
 
 class GeometryRequest(BaseModel):
-    """Flasher parameters as the UI holds them (angles in degrees).
+    """Square-flasher parameters as the UI holds them.
 
     Frozen so identical requests hash equal — the geometry endpoint caches on
     the whole request object."""
 
     model_config = {"frozen": True}
 
-    sides: int = Field(ge=3, le=16)
-    rings: int = Field(ge=1, le=24)
-    spiralAngleDeg: float = Field(ge=0, le=60)
-    wrapAngleDeg: float = Field(ge=0, le=180)
-    radiusRatio: float = Field(gt=1, le=2)
-    centralRadius: float = Field(gt=0, le=10)
+    gridDivisions: int = Field(ge=8, le=40)
+    wrapPerRing: float = Field(default=1.0, ge=0, le=4)
+    layerGapRatio: float = Field(default=0.08, gt=0, le=0.5)
+    heightRatio: float = Field(default=0.25, ge=0, le=1)
+
+    @field_validator("gridDivisions")
+    @classmethod
+    def _even_grid(cls, v: int) -> int:
+        if v % 2 != 0:
+            raise ValueError("gridDivisions must be even (the hub sits on the center lines)")
+        return v
 
     def to_params(self) -> FlasherParams:
         return FlasherParams(
-            sides=self.sides,
-            rings=self.rings,
-            spiral_angle=self.spiralAngleDeg * DEG,
-            wrap_angle=self.wrapAngleDeg * DEG,
-            radius_ratio=self.radiusRatio,
-            central_radius=self.centralRadius,
+            grid_divisions=self.gridDivisions,
+            wrap_per_ring=self.wrapPerRing,
+            layer_gap_ratio=self.layerGapRatio,
+            height_ratio=self.heightRatio,
         )
 
 

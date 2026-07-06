@@ -47,15 +47,14 @@ export interface CreasePattern {
   sides: number; // n
 }
 
-// Flasher parameters as the UI holds them (angles in degrees); the backend
-// converts to radians. Body of POST /api/flasher/geometry.
+// Square-flasher parameters. The sheet is always a square, gridDivisions×
+// gridDivisions unit cells around a central 2×2 hub. Body of
+// POST /api/flasher/geometry.
 export interface FlasherParams {
-  sides: number;
-  rings: number;
-  spiralAngleDeg: number;
-  wrapAngleDeg: number;
-  radiusRatio: number;
-  centralRadius: number;
+  gridDivisions: number; // N, even; Shafer's Big Bang uses 32
+  wrapPerRing: number; // square-angle sides of extra wrap per ring at full fold
+  layerGapRatio: number; // spacing of the wrapped layers, grid units per ring
+  heightRatio: number; // stowed height gained per ring of flat material
 }
 
 export interface FlasherPreset extends FlasherParams {

@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { Canvas } from "@react-three/fiber";
 import { OrbitControls } from "@react-three/drei";
 import type { FlasherParams } from "../../model/types";
@@ -15,12 +14,10 @@ interface Props {
 }
 
 export function Scene({ params, foldness, color, roughness, metalness, autoRotate }: Props) {
-  // Camera distance is fixed at mount (presets are all similar in size);
-  // never remount the Canvas — it blanks the view while the WebGL context
-  // and scene rebuild.
-  const [cameraDistance] = useState(
-    () => params.centralRadius * Math.pow(params.radiusRatio, params.rings) * 3.2,
-  );
+  // Never remount the Canvas — it blanks the view while the WebGL context and
+  // scene rebuild. Instead of moving the camera per preset, the model group
+  // is scale-normalized to a 16-unit sheet and the camera stays fixed.
+  const cameraDistance = 34;
 
   return (
     // Camera via the Canvas prop (not drei's <PerspectiveCamera makeDefault>):
@@ -39,13 +36,15 @@ export function Scene({ params, foldness, color, roughness, metalness, autoRotat
       <directionalLight position={[-6, 4, 3]} intensity={0.5} />
       <ambientLight intensity={0.35} />
       <FoldAnimator />
-      <FlasherModel
-        params={params}
-        foldness={foldness}
-        color={color}
-        roughness={roughness}
-        metalness={metalness}
-      />
+      <group scale={16 / params.gridDivisions}>
+        <FlasherModel
+          params={params}
+          foldness={foldness}
+          color={color}
+          roughness={roughness}
+          metalness={metalness}
+        />
+      </group>
     </Canvas>
   );
 }
