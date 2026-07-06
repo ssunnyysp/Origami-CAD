@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Canvas } from "@react-three/fiber";
 import { OrbitControls } from "@react-three/drei";
-import type { FlasherParams } from "../../model/flasherGenerator";
+import type { FlasherParams } from "../../model/types";
 import { FlasherModel } from "./FlasherModel";
 import { FoldAnimator } from "./FoldAnimator";
 

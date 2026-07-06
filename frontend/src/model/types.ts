@@ -1,5 +1,8 @@
 // Custom crease-pattern data model (not the FOLD format — this app generates
 // patterns parametrically rather than importing authored files).
+//
+// These types are the API contract with the Python backend: the JSON returned
+// by /api/presets and /api/flasher/geometry deserializes directly into them.
 
 export interface Point2D {
   x: number;
@@ -42,4 +45,34 @@ export interface CreasePattern {
   adjacency: FaceAdjacency[];
   ringCount: number; // k, number of concentric pleat rings (excluding the central polygon)
   sides: number; // n
+}
+
+// Flasher parameters as the UI holds them (angles in degrees); the backend
+// converts to radians. Body of POST /api/flasher/geometry.
+export interface FlasherParams {
+  sides: number;
+  rings: number;
+  spiralAngleDeg: number;
+  wrapAngleDeg: number;
+  radiusRatio: number;
+  centralRadius: number;
+}
+
+export interface FlasherPreset extends FlasherParams {
+  id: string;
+  name: string;
+  paperColor: string;
+  roughness: number;
+  metalness: number;
+}
+
+// Response of POST /api/flasher/geometry: the crease pattern plus the fold
+// trajectory solved server-side as one 0→1 sweep. frames[k] holds xyz triples
+// (indexed by vertex id) at foldnessSamples[k]; the client lerps between
+// adjacent frames for arbitrary foldness values, so animation never needs a
+// network round trip.
+export interface FlasherGeometry {
+  pattern: CreasePattern;
+  foldnessSamples: number[];
+  frames: number[][];
 }
