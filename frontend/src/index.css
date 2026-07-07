@@ -1,6 +1,12 @@
 :root {
-  color-scheme: dark;
-  font: 15px/1.4 system-ui, "Segoe UI", Roboto, sans-serif;
+  color-scheme: light;
+  font: 15px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --ink: #2b2926;
+  --ink-soft: #8a8579;
+  --paper: #f4f1ea;
+  --card: rgba(255, 255, 255, 0.86);
+  --line: rgba(43, 41, 38, 0.1);
+  --accent: #c96f4a; /* warm terracotta — reads "paper", not "tech" */
 }
 
 * {
@@ -12,69 +18,160 @@ body,
 #root {
   margin: 0;
   height: 100%;
-  background: #14151a;
-  color: #e5e5ea;
+  background: var(--paper);
+  color: var(--ink);
 }
 
 .app-layout {
-  display: flex;
+  position: relative;
   height: 100vh;
   width: 100vw;
   overflow: hidden;
 }
 
 .canvas-area {
-  flex: 1;
-  min-width: 0;
-  min-height: 0;
+  position: absolute;
+  inset: 0;
 }
 
+/* Floating card over the canvas instead of a chrome-heavy sidebar. */
 .control-panel {
-  width: 300px;
-  flex-shrink: 0;
-  padding: 20px;
-  background: #1c1d24;
-  border-left: 1px solid #2e303a;
-  overflow-y: auto;
+  position: absolute;
+  top: 24px;
+  right: 24px;
+  width: 290px;
+  padding: 20px 22px 18px;
+  background: var(--card);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  box-shadow:
+    0 1px 2px rgba(43, 41, 38, 0.05),
+    0 12px 32px rgba(43, 41, 38, 0.1);
 }
 
 .control-panel h1 {
-  font-size: 18px;
-  margin: 0 0 16px;
-  font-weight: 600;
+  font-size: 15px;
+  margin: 0 0 4px;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+}
+
+.panel-subtitle {
+  font-size: 12px;
+  color: var(--ink-soft);
+  margin: 0 0 18px;
 }
 
 .control-row {
   display: grid;
-  grid-template-columns: 90px 1fr 40px;
+  grid-template-columns: 78px 1fr 44px;
   align-items: center;
-  gap: 8px;
-  margin-bottom: 14px;
+  gap: 10px;
+  margin-bottom: 16px;
   font-size: 13px;
 }
 
+.control-row:last-child {
+  margin-bottom: 2px;
+}
+
 .control-row > span:first-child {
-  color: #9ca3af;
+  color: var(--ink-soft);
+  font-weight: 500;
 }
 
 .control-row select {
   grid-column: 2 / span 2;
+  appearance: none;
+  font: inherit;
+  font-size: 13px;
+  color: var(--ink);
+  padding: 7px 28px 7px 10px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background:
+    url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="10" height="6" viewBox="0 0 10 6"><path d="M1 1l4 4 4-4" fill="none" stroke="%238a8579" stroke-width="1.5" stroke-linecap="round"/></svg>')
+      no-repeat right 10px center,
+    #fff;
+  cursor: pointer;
+}
+
+.control-row select:hover {
+  border-color: rgba(43, 41, 38, 0.22);
 }
 
 .control-value {
   text-align: right;
   font-variant-numeric: tabular-nums;
-  color: #9ca3af;
+  font-size: 12px;
+  color: var(--ink-soft);
+}
+
+/* Slider */
+input[type="range"] {
+  appearance: none;
+  width: 100%;
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(43, 41, 38, 0.14);
+  outline: none;
+  cursor: pointer;
+}
+
+input[type="range"]::-webkit-slider-thumb {
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  border: 1.5px solid var(--accent);
+  box-shadow: 0 1px 4px rgba(43, 41, 38, 0.25);
+}
+
+input[type="range"]::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #fff;
+  border: 1.5px solid var(--accent);
+  box-shadow: 0 1px 4px rgba(43, 41, 38, 0.25);
+}
+
+input[type="checkbox"] {
+  accent-color: var(--accent);
+  width: 15px;
+  height: 15px;
+  cursor: pointer;
+}
+
+input[type="color"] {
+  appearance: none;
+  width: 40px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: none;
+  cursor: pointer;
+}
+
+input[type="color"]::-webkit-color-swatch-wrapper {
+  padding: 2px;
+}
+
+input[type="color"]::-webkit-color-swatch {
+  border: none;
+  border-radius: 5px;
 }
 
 @media (max-width: 720px) {
-  .app-layout {
-    flex-direction: column;
-  }
-
   .control-panel {
-    width: 100%;
-    border-left: none;
-    border-top: 1px solid #2e303a;
+    top: auto;
+    bottom: 16px;
+    left: 16px;
+    right: 16px;
+    width: auto;
   }
 }

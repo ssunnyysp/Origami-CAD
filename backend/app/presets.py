@@ -4,6 +4,22 @@ Bang uses 32)."""
 
 PRESETS: list[dict] = [
     {
+        # The starter model: a coarse grid whose folded state reads as a small
+        # cube-ish block — the clearest demonstration of flat sheet ↔ 3D form.
+        # Taller heightRatio and wider layer gap make the stowed proportions
+        # roughly cubic.
+        # wrap 1.5 / height 0.72 give a folded aspect ratio of ~1.0 — a cube.
+        "id": "simple-8",
+        "name": "Simple Flasher (8×8)",
+        "gridDivisions": 8,
+        "wrapPerRing": 1.5,
+        "layerGapRatio": 0.15,
+        "heightRatio": 0.72,
+        "paperColor": "#d97757",
+        "roughness": 0.8,
+        "metalness": 0.02,
+    },
+    {
         "id": "classic-16",
         "name": "Classic Flasher (16×16)",
         "gridDivisions": 16,

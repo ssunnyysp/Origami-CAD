@@ -10,6 +10,10 @@ interface Props {
   metalness: number;
 }
 
+// The back of the sheet is always plain paper — origami paper is colored on
+// one side only, and the two-tone folds are part of the look.
+const PLAIN_PAPER = "#f6f1e6";
+
 // One non-indexed geometry for the whole sheet, rebuilt from the solver's
 // vertex positions. Non-indexed so normals stay per-face (flat shading),
 // matching folded paper.
@@ -35,22 +39,42 @@ export function FlasherMesh({ pattern, positions, color, roughness, metalness }:
 
   useEffect(() => () => geometry.dispose(), [geometry]);
 
-  // One material instance, mutated in place so color/foldness drags never
-  // trigger material re-creation. polygonOffset pushes the surface back so
-  // the crease-line overlay doesn't z-fight.
-  const material = useMemo(
+  // Two materials over the same geometry: faces wind CCW in the flat pattern,
+  // so FrontSide is the sheet's top (the colored side) and BackSide is the
+  // underside (plain paper). Material instances are mutated in place so
+  // color/foldness drags never trigger material re-creation; polygonOffset
+  // pushes the surface back so the crease-line overlay doesn't z-fight.
+  const frontMaterial = useMemo(
     () =>
       new THREE.MeshStandardMaterial({
-        side: THREE.DoubleSide,
+        side: THREE.FrontSide,
         polygonOffset: true,
         polygonOffsetFactor: 1,
         polygonOffsetUnits: 1,
       }),
     [],
   );
-  material.color.set(color);
-  material.roughness = roughness;
-  material.metalness = metalness;
+  const backMaterial = useMemo(
+    () =>
+      new THREE.MeshStandardMaterial({
+        side: THREE.BackSide,
+        color: PLAIN_PAPER,
+        roughness: 0.92,
+        metalness: 0,
+        polygonOffset: true,
+        polygonOffsetFactor: 1,
+        polygonOffsetUnits: 1,
+      }),
+    [],
+  );
+  frontMaterial.color.set(color);
+  frontMaterial.roughness = roughness;
+  frontMaterial.metalness = metalness;
 
-  return <mesh geometry={geometry} material={material} />;
+  return (
+    <>
+      <mesh geometry={geometry} material={frontMaterial} />
+      <mesh geometry={geometry} material={backMaterial} />
+    </>
+  );
 }

@@ -7,6 +7,7 @@ export function ControlPanel() {
   return (
     <div className="control-panel">
       <h1>Origami CAD</h1>
+      <p className="panel-subtitle">Flasher fold simulator</p>
       <ModelSelector />
       <FoldnessSlider />
       <AnimateToggle />

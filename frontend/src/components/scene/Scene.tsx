@@ -28,13 +28,15 @@ export function Scene({ params, foldness, color, roughness, metalness, autoRotat
       camera={{ position: [0, -cameraDistance * 0.7, cameraDistance * 0.7], fov: 45 }}
       onCreated={({ camera }) => camera.lookAt(0, 0, 0)}
     >
+      {/* Matches the page's warm paper background (see index.css --paper). */}
+      <color attach="background" args={["#eceadf"]} />
       <OrbitControls autoRotate={autoRotate} autoRotateSpeed={1.2} />
       {/* Local lights only — a CDN-fetched Environment map suspends the whole
           scene (blank canvas) whenever the network is slow or offline. */}
-      <hemisphereLight args={["#ffffff", "#556", 0.9]} />
-      <directionalLight position={[5, -6, 8]} intensity={1.6} />
+      <hemisphereLight args={["#ffffff", "#d8d2c4", 0.8]} />
+      <directionalLight position={[5, -6, 8]} intensity={1.5} />
       <directionalLight position={[-6, 4, 3]} intensity={0.5} />
-      <ambientLight intensity={0.35} />
+      <ambientLight intensity={0.4} />
       <FoldAnimator />
       <group scale={16 / params.gridDivisions}>
         <FlasherModel

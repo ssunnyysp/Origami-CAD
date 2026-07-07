@@ -48,19 +48,21 @@ export const useAppStore = create<AppState>((set, get) => ({
   selectedPresetId: "",
   foldness: 0,
   animating: false,
-  paperColor: "#e8dcc8",
+  paperColor: "#d97757",
   roughness: 0.8,
-  metalness: 0.05,
-  gridDivisions: 16,
+  metalness: 0.02,
+  gridDivisions: 8,
   wrapPerRing: 1.0,
-  layerGapRatio: 0.1,
-  heightRatio: 0.3,
+  layerGapRatio: 0.15,
+  heightRatio: 0.85,
 
   loadPresets: async () => {
     if (get().presets.length > 0) return;
     const presets = await fetchPresets();
     if (presets.length === 0) throw new Error("backend returned no presets");
-    set({ presets, ready: true, ...applyPreset(presets[0]) });
+    // First impression: open on the folded 3D form, so dragging the slider
+    // unfolds it into the flat sheet.
+    set({ presets, ready: true, ...applyPreset(presets[0]), foldness: 1 });
   },
   setFoldness: (t) => set({ foldness: t }),
   setAnimating: (v) => set({ animating: v }),

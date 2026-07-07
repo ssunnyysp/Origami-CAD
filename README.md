@@ -11,8 +11,11 @@ twist-fold tessellations. A Python (FastAPI) backend owns all the geometry math;
 - Animates stow/deploy live via a "foldness" slider (0 = flat/deployed, 1 = wrapped/stowed)
 - Draws a CAD-style crease overlay — mountain folds blue (paper folds up), valley folds red
   (paper folds down), border dark — fading out as the model folds
-- Lets you change paper color, roughness, and metalness
-- Ships with 3 curated presets (16×16 classic, 24×24 fine, 32×32 Big Bang)
+- Renders two-sided paper: the top face takes the chosen color, the underside stays plain —
+  like real origami paper
+- Ships with 4 curated presets; the default Simple Flasher (8×8) folds from a flat square
+  into a cube-proportioned block, and the app opens on the folded form so dragging the
+  slider unfolds it
 
 ## Architecture
 
