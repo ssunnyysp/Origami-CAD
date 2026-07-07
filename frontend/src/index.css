@@ -4,7 +4,7 @@
   --ink: #2b2926;
   --ink-soft: #8a8579;
   --paper: #f4f1ea;
-  --card: rgba(255, 255, 255, 0.86);
+  --pane: #fbfaf7;
   --line: rgba(43, 41, 38, 0.1);
   --accent: #c96f4a; /* warm terracotta — reads "paper", not "tech" */
 }
@@ -23,37 +23,43 @@ body,
 }
 
 .app-layout {
-  position: relative;
+  display: flex;
   height: 100vh;
   width: 100vw;
   overflow: hidden;
 }
 
 .canvas-area {
-  position: absolute;
-  inset: 0;
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
 }
 
-/* Floating card over the canvas instead of a chrome-heavy sidebar. */
-.control-panel {
-  position: absolute;
-  top: 24px;
-  right: 24px;
-  width: 290px;
-  padding: 20px 22px 18px;
-  background: var(--card);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
-  border: 1px solid var(--line);
-  border-radius: 16px;
-  box-shadow:
-    0 1px 2px rgba(43, 41, 38, 0.05),
-    0 12px 32px rgba(43, 41, 38, 0.1);
+/* --- Task pane ---------------------------------------------------------- */
+
+.task-pane {
+  width: 320px;
+  flex-shrink: 0;
+  height: 100%;
+  padding: 22px 24px;
+  background: var(--pane);
+  border-left: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
 }
 
-.control-panel h1 {
+.pane-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 22px;
+}
+
+.pane-header h1 {
   font-size: 15px;
-  margin: 0 0 4px;
+  margin: 0 0 3px;
   font-weight: 650;
   letter-spacing: 0.01em;
 }
@@ -61,8 +67,40 @@ body,
 .panel-subtitle {
   font-size: 12px;
   color: var(--ink-soft);
-  margin: 0 0 18px;
+  margin: 0;
 }
+
+.pane-toggle,
+.pane-reopen {
+  font: inherit;
+  font-size: 14px;
+  line-height: 1;
+  color: var(--ink-soft);
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  cursor: pointer;
+}
+
+.pane-toggle:hover,
+.pane-reopen:hover {
+  color: var(--ink);
+  border-color: rgba(43, 41, 38, 0.25);
+}
+
+/* Floating reopen handle when the pane is collapsed. */
+.pane-reopen {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  box-shadow: 0 2px 8px rgba(43, 41, 38, 0.12);
+  z-index: 2;
+}
+
+/* --- Controls ------------------------------------------------------------ */
 
 .control-row {
   display: grid;
@@ -71,10 +109,6 @@ body,
   gap: 10px;
   margin-bottom: 16px;
   font-size: 13px;
-}
-
-.control-row:last-child {
-  margin-bottom: 2px;
 }
 
 .control-row > span:first-child {
@@ -107,6 +141,25 @@ body,
   font-variant-numeric: tabular-nums;
   font-size: 12px;
   color: var(--ink-soft);
+}
+
+.action-button {
+  width: 100%;
+  margin-top: 6px;
+  padding: 9px 12px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 550;
+  color: var(--ink);
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  cursor: pointer;
+}
+
+.action-button:hover {
+  border-color: var(--accent);
+  color: var(--accent);
 }
 
 /* Slider */
@@ -166,12 +219,56 @@ input[type="color"]::-webkit-color-swatch {
   border-radius: 5px;
 }
 
+/* --- Pattern view --------------------------------------------------------- */
+
+.pattern-view {
+  position: absolute;
+  inset: 0;
+  background: var(--pane);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1;
+}
+
+.pattern-view svg {
+  width: min(86%, 86vh);
+  height: min(86%, 86vh);
+}
+
+.pattern-legend {
+  position: absolute;
+  bottom: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 18px;
+  font-size: 12px;
+  color: var(--ink-soft);
+}
+
+.pattern-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.pattern-legend i {
+  display: inline-block;
+  width: 14px;
+  height: 3px;
+  border-radius: 2px;
+}
+
 @media (max-width: 720px) {
-  .control-panel {
-    top: auto;
-    bottom: 16px;
-    left: 16px;
-    right: 16px;
-    width: auto;
+  .app-layout {
+    flex-direction: column;
+  }
+
+  .task-pane {
+    width: 100%;
+    height: auto;
+    border-left: none;
+    border-top: 1px solid var(--line);
   }
 }

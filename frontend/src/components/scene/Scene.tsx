@@ -10,10 +10,9 @@ interface Props {
   color: string;
   roughness: number;
   metalness: number;
-  autoRotate?: boolean;
 }
 
-export function Scene({ params, foldness, color, roughness, metalness, autoRotate }: Props) {
+export function Scene({ params, foldness, color, roughness, metalness }: Props) {
   // Never remount the Canvas — it blanks the view while the WebGL context and
   // scene rebuild. Instead of moving the camera per preset, the model group
   // is scale-normalized to a 16-unit sheet and the camera stays fixed.
@@ -30,7 +29,8 @@ export function Scene({ params, foldness, color, roughness, metalness, autoRotat
     >
       {/* Matches the page's warm paper background (see index.css --paper). */}
       <color attach="background" args={["#eceadf"]} />
-      <OrbitControls autoRotate={autoRotate} autoRotateSpeed={1.2} />
+      {/* Static model — the user orbits manually; no auto-rotation. */}
+      <OrbitControls />
       {/* Local lights only — a CDN-fetched Environment map suspends the whole
           scene (blank canvas) whenever the network is slow or offline. */}
       <hemisphereLight args={["#ffffff", "#d8d2c4", 0.8]} />

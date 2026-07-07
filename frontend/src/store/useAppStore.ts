@@ -12,6 +12,7 @@ interface AppState {
   selectedPresetId: string;
   foldness: number;
   animating: boolean;
+  viewMode: "3d" | "pattern";
   paperColor: string;
   roughness: number;
   metalness: number;
@@ -24,6 +25,7 @@ interface AppState {
   setFoldness: (t: number) => void;
   setAnimating: (v: boolean) => void;
   setPaperColor: (c: string) => void;
+  setViewMode: (m: "3d" | "pattern") => void;
   selectPreset: (id: string) => void;
 }
 
@@ -48,6 +50,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   selectedPresetId: "",
   foldness: 0,
   animating: false,
+  viewMode: "3d",
   paperColor: "#d97757",
   roughness: 0.8,
   metalness: 0.02,
@@ -67,6 +70,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   setFoldness: (t) => set({ foldness: t }),
   setAnimating: (v) => set({ animating: v }),
   setPaperColor: (c) => set({ paperColor: c }),
+  setViewMode: (m) => set({ viewMode: m, animating: false }),
   selectPreset: (id) => {
     const preset = get().presets.find((p) => p.id === id);
     if (!preset) return;

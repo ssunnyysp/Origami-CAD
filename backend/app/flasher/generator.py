@@ -1,22 +1,26 @@
-"""Square-grid flasher crease-pattern generator (Shafer / Lang style).
+"""Square pinwheel-flasher crease-pattern generator.
 
-The sheet is always a SQUARE, divided into an N×N unit grid around a central
-2×2 hub square. The crease structure follows the classic flasher:
+This is the classic single-layer flasher (Guest & Pellegrino wrap, the
+pattern in every flasher tutorial): a square sheet on an N×N unit grid with
+a 1×1 hub cell at the center and 4-fold ROTATIONAL (chiral) symmetry — the
+whole pattern is one sector's creases stamped four times, rotated 90° about
+the hub center.
 
-- The two main diagonals split the sheet into 4 triangular quadrants.
-- In each quadrant, the grid lines PARALLEL to the near sheet edge are the
-  pleat creases ("ring" lines), alternating mountain/valley by ring parity.
-- Crossing a diagonal into the next quadrant flips every ring line's gender
-  (Shafer: "every crease should get mountained and valleyed"). This
-  per-quadrant flip is what makes the collapse a spiral wrap around the hub
-  rather than a flat twist fold.
-- Every cell is split into 4 triangles by an X through its center. In cells
-  along the main diagonals the X halves are real creases (the reverse folds
-  that turn a pleat 90° around the hub corner); elsewhere they are "facet"
-  edges — triangulation only, never drawn.
+Structure per sector (the "north" sector shown; the rest are rotations):
 
-Grid lines perpendicular to a quadrant's pleats are "facet" too: they exist
-in the mesh but are not creases of the pattern.
+- One 45° diagonal ray per hub corner, all swirling the same direction.
+  Two of the four happen to reach sheet corners, two hit edge midspans —
+  the pinwheel is deliberately not mirror-symmetric.
+- Pleat creases run PERPENDICULAR to the sector's outer edge (radially),
+  one per grid line, each hanging from the sheet edge down to the diagonal
+  it dies into. Genders alternate by grid parity, so the sheet accordions.
+- Crossing a diagonal, a pleat continues as a pleat of the next sector
+  rotated 90° — the reverse folds that carry the wrap around the hub
+  corners.
+
+Every cell is split into 4 triangles by an X through its center so the mesh
+can flex; only X halves lying on the four diagonal rays are real creases,
+the rest are "facet" edges (never drawn).
 """
 
 from __future__ import annotations
@@ -24,7 +28,9 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass, field
 
-HUB_HALF = 1.0  # half-size of the central hub square, in grid units
+# The hub is the single grid cell [0,1]²; the sheet spans [-m, m].
+HUB_CENTER = (0.5, 0.5)
+HUB_HALF = 0.5
 
 
 @dataclass(frozen=True)
@@ -38,7 +44,7 @@ class FlasherParams:
 @dataclass
 class Vertex:
     id: int
-    position: tuple[float, float]  # flat-pattern coordinates, sheet center at origin
+    position: tuple[float, float]  # flat-pattern coordinates
 
 
 @dataclass
@@ -54,7 +60,7 @@ class Face:
     id: int
     vertex_ids: list[int]  # ordered CCW in the flat pattern
     edge_ids: list[int]  # same winding order
-    ring_index: int  # taxicab ring this face belongs to (0 = hub)
+    ring_index: int  # taxicab ring about the hub center (0 = hub)
 
 
 @dataclass
@@ -70,16 +76,67 @@ class CreasePattern:
 def generate_flasher(params: FlasherParams) -> CreasePattern:
     n = params.grid_divisions
     if n % 2 != 0:
-        raise ValueError("grid_divisions must be even (hub sits on the center lines)")
+        raise ValueError("grid_divisions must be even (the hub sits on the center cell)")
     m = n // 2  # coordinates run -m..m
 
+    # --- crease assignments ------------------------------------------------
+    # Grid-line creases, keyed by sorted unit-segment endpoints.
+    seg_assignment: dict[tuple[tuple[int, int], tuple[int, int]], str] = {}
+
+    def set_seg(p: tuple[int, int], q: tuple[int, int], assignment: str) -> None:
+        key = (p, q) if p <= q else (q, p)
+        seg_assignment.setdefault(key, assignment)
+
+    # Hub boundary: the wrap starts here.
+    hub = [(0, 0), (1, 0), (1, 1), (0, 1)]
+    for i in range(4):
+        set_seg(hub[i], hub[(i + 1) % 4], "mountain")
+
+    # Pleats, one sector per sheet edge, each pleat running from the diagonal
+    # it dies into out to its sector's edge. The north/east sectors are
+    # bounded inward by max(k, 1-k) (the NE/NW and NE/SE rays), the south/
+    # west sectors by min(k, 1-k). A pleat keeps its gender as it turns a
+    # hub corner — the wall crease of the wrap is continuous — so gender is
+    # a function of grid parity alone.
+    for k in range(-(m - 1), m):
+        gender = "mountain" if k % 2 == 0 else "valley"
+        near = max(k, 1 - k)  # inner end against the upper/right diagonals
+        far = min(k, 1 - k)  # inner end against the lower/left diagonals
+
+        for y in range(near, m):  # north: vertical pleat x = k
+            set_seg((k, y), (k, y + 1), gender)
+        for y in range(-m, far):  # south: vertical pleat x = k
+            set_seg((k, y), (k, y + 1), gender)
+        for x in range(near, m):  # east: horizontal pleat y = k
+            set_seg((x, k), (x + 1, k), gender)
+        for x in range(-m, far):  # west: horizontal pleat y = k
+            set_seg((x, k), (x + 1, k), gender)
+
+    # Diagonal rays through cell X's: (t, t) main-diagonal cells for the NE
+    # ray and its three rotations. Gender alternates along each ray — the
+    # corner reverse-folds flip every layer of the wrap.
+    diag_cells: dict[tuple[int, int], tuple[str, str]] = {}  # cell -> (which, gender)
+    for t in range(1, m):
+        gender = "mountain" if t % 2 == 1 else "valley"
+        diag_cells[(t, t)] = ("main", gender)
+        diag_cells[(t, -t)] = ("anti", gender)
+        diag_cells[(-t, -t)] = ("main", gender)
+        diag_cells[(-t, t)] = ("anti", gender)
+
+    def grid_segment_assignment(p: tuple[int, int], q: tuple[int, int]) -> str:
+        (x1, y1), (x2, y2) = p, q
+        if (abs(x1) == m and abs(x2) == m) or (abs(y1) == m and abs(y2) == m):
+            return "border"
+        key = (p, q) if p <= q else (q, p)
+        return seg_assignment.get(key, "facet")
+
+    # --- mesh --------------------------------------------------------------
     grid_stride = n + 1
 
     def grid_id(x: int, y: int) -> int:
         return (y + m) * grid_stride + (x + m)
 
     def center_id(cx: int, cy: int) -> int:
-        # cell (cx, cy) spans [cx, cx+1] × [cy, cy+1]; cx, cy in [-m, m-1]
         return grid_stride * grid_stride + (cy + m) * n + (cx + m)
 
     vertices: list[Vertex] = []
@@ -103,29 +160,6 @@ def generate_flasher(params: FlasherParams) -> CreasePattern:
         edges.append(Edge(id=edge_id, v0=a, v1=b, assignment=assignment))
         return edge_id
 
-    def ring_gender(ring: int, quadrant: int) -> str:
-        # Gender flips every quadrant (the spiral) and every ring (the pleats).
-        return "mountain" if (ring + quadrant) % 2 == 0 else "valley"
-
-    def horizontal_assignment(x: int, k: int) -> str:
-        """Grid segment from (x, k) to (x+1, k)."""
-        if abs(k) == m:
-            return "border"
-        # Pleat crease only where the segment lies on taxicab ring |k| — i.e.
-        # inside the top (k>0) or bottom (k<0) quadrant. Elsewhere it runs
-        # radially and is just mesh structure.
-        if k != 0 and max(abs(x), abs(x + 1)) <= abs(k):
-            return ring_gender(abs(k), 1 if k > 0 else 3)
-        return "facet"
-
-    def vertical_assignment(j: int, y: int) -> str:
-        """Grid segment from (j, y) to (j, y+1)."""
-        if abs(j) == m:
-            return "border"
-        if j != 0 and max(abs(y), abs(y + 1)) <= abs(j):
-            return ring_gender(abs(j), 0 if j > 0 else 2)
-        return "facet"
-
     faces: list[Face] = []
 
     for cy in range(-m, m):
@@ -136,33 +170,31 @@ def generate_flasher(params: FlasherParams) -> CreasePattern:
             v01 = grid_id(cx, cy + 1)
             vc = center_id(cx, cy)
 
-            cell_ring = max(abs(cx + 0.5), abs(cy + 0.5))  # taxicab radius of cell center
-
-            # X assignments: real creases only in cells the sheet diagonals
-            # pass through (and outside the hub). The half-diagonals ON the
-            # sheet diagonal carry one gender; the crossing pair carries the
-            # opposite — the reverse-fold detail of the flasher.
-            on_main_diag = cx == cy  # sheet diagonal y = x runs v00 → vc → v11
-            on_anti_diag = cy == -cx - 1  # sheet diagonal y = -x runs v10 → vc → v01
             main_half = cross_half = "facet"
-            if cell_ring > HUB_HALF and (on_main_diag or on_anti_diag):
-                k = int(cell_ring + 0.5)
-                diag_gender = "mountain" if k % 2 == 0 else "valley"
-                reverse_gender = "valley" if k % 2 == 0 else "mountain"
-                if on_main_diag:
-                    main_half, cross_half = diag_gender, reverse_gender
+            diag = diag_cells.get((cx, cy))
+            if diag is not None:
+                which, gender = diag
+                if which == "main":
+                    main_half = gender
                 else:
-                    main_half, cross_half = reverse_gender, diag_gender
+                    cross_half = gender
 
-            e_bottom = get_or_create_edge(v00, v10, horizontal_assignment(cx, cy))
-            e_top = get_or_create_edge(v01, v11, horizontal_assignment(cx, cy + 1))
-            e_left = get_or_create_edge(v00, v01, vertical_assignment(cx, cy))
-            e_right = get_or_create_edge(v10, v11, vertical_assignment(cx + 1, cy))
+            e_bottom = get_or_create_edge(
+                v00, v10, grid_segment_assignment((cx, cy), (cx + 1, cy))
+            )
+            e_top = get_or_create_edge(
+                v01, v11, grid_segment_assignment((cx, cy + 1), (cx + 1, cy + 1))
+            )
+            e_left = get_or_create_edge(v00, v01, grid_segment_assignment((cx, cy), (cx, cy + 1)))
+            e_right = get_or_create_edge(
+                v10, v11, grid_segment_assignment((cx + 1, cy), (cx + 1, cy + 1))
+            )
             e_00c = get_or_create_edge(v00, vc, main_half)
             e_11c = get_or_create_edge(v11, vc, main_half)
             e_10c = get_or_create_edge(v10, vc, cross_half)
             e_01c = get_or_create_edge(v01, vc, cross_half)
 
+            cell_ring = max(abs(cx + 0.5 - HUB_CENTER[0]), abs(cy + 0.5 - HUB_CENTER[1]))
             ring_index = int(math.ceil(cell_ring))
             for tri_vertices, tri_edges in (
                 ([v00, v10, vc], [e_bottom, e_10c, e_00c]),

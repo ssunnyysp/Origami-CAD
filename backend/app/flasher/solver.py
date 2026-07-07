@@ -30,7 +30,7 @@ import math
 import numpy as np
 
 from .fold_engine import compute_target_positions
-from .generator import HUB_HALF, CreasePattern, FlasherParams
+from .generator import HUB_CENTER, HUB_HALF, CreasePattern, FlasherParams
 
 TARGET_PULL = 0.3  # fraction of the gap to the kinematic target applied per substep
 PROJECT_ITERATIONS = 30  # Jacobi projection passes over all edges per substep
@@ -45,7 +45,9 @@ class FlasherFoldSolver:
         self.pos = compute_target_positions(self.flat, params, 0.0)  # (V, 3)
         self.last_foldness = 0.0
 
-        rho = np.maximum(np.abs(self.flat[:, 0]), np.abs(self.flat[:, 1]))
+        rho = np.maximum(
+            np.abs(self.flat[:, 0] - HUB_CENTER[0]), np.abs(self.flat[:, 1] - HUB_CENTER[1])
+        )
         self.free = rho > HUB_HALF + 1e-9  # (V,) pinned hub vertices are immovable
 
         # Every unique mesh edge is a constraint; the generator's edge list

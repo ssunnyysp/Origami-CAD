@@ -21,11 +21,13 @@ from __future__ import annotations
 
 import numpy as np
 
-from .generator import HUB_HALF, FlasherParams
+from .generator import HUB_CENTER, HUB_HALF, FlasherParams
 
 
 def square_polar(flat: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-    """(V, 2) flat positions → (rho, psi). psi is 0 at the (+h, -h) corner, CCW."""
+    """(V, 2) positions relative to the hub center → (rho, psi).
+
+    psi is 0 at the (+h, -h) corner, CCW."""
     x, y = flat[:, 0], flat[:, 1]
     rho = np.maximum(np.abs(x), np.abs(y))
     safe_rho = np.where(rho < 1e-12, 1.0, rho)
@@ -65,7 +67,8 @@ def compute_target_positions(
 ) -> np.ndarray:
     """(V, 2) flat positions → (V, 3) target positions at `foldness`."""
     t = min(1.0, max(0.0, foldness))
-    rho, psi = square_polar(flat)
+    centered = flat - np.array(HUB_CENTER)
+    rho, psi = square_polar(centered)
     beyond_hub = np.maximum(rho - HUB_HALF, 0.0)  # hub itself never moves
 
     psi_folded = psi + t * params.wrap_per_ring * beyond_hub
@@ -79,5 +82,7 @@ def compute_target_positions(
     z = t * params.height_ratio * beyond_hub
 
     out = np.empty((len(flat), 3))
-    out[:, 0], out[:, 1], out[:, 2] = x, y, z
+    out[:, 0] = x + HUB_CENTER[0]
+    out[:, 1] = y + HUB_CENTER[1]
+    out[:, 2] = z
     return out
