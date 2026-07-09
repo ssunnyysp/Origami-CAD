@@ -17,16 +17,18 @@ class GeometryRequest(BaseModel):
 
     model_config = {"frozen": True}
 
-    gridDivisions: int = Field(ge=8, le=40)
+    gridDivisions: int = Field(ge=7, le=41)
     wrapPerRing: float = Field(default=1.0, ge=0, le=4)
     layerGapRatio: float = Field(default=0.08, gt=0, le=0.5)
     heightRatio: float = Field(default=0.25, ge=0, le=1)
 
     @field_validator("gridDivisions")
     @classmethod
-    def _even_grid(cls, v: int) -> int:
-        if v % 2 != 0:
-            raise ValueError("gridDivisions must be even (the hub sits on the center lines)")
+    def _odd_grid(cls, v: int) -> int:
+        if v % 2 != 1:
+            raise ValueError(
+                "gridDivisions must be odd, so the sheet has a single, well-centered hub cell"
+            )
         return v
 
     def to_params(self) -> FlasherParams:
