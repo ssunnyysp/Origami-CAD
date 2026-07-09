@@ -1,22 +1,19 @@
-"""Square pinwheel-flasher crease-pattern generator.
+"""Square flasher crease-pattern generator (Zirbel & Lang 2013 style, as in
+the ORI*botics "natural folding" diagram).
 
-This is the classic single-layer flasher (Guest & Pellegrino wrap, the
-pattern in every flasher tutorial): a square sheet on an N×N unit grid with
-a 1×1 hub cell at the center and 4-fold ROTATIONAL (chiral) symmetry — the
-whole pattern is one sector's creases stamped four times, rotated 90° about
-the hub center.
+A square sheet on an N×N unit grid with a 1×1 hub cell at the center and
+4-fold ROTATIONAL (chiral) symmetry:
 
-Structure per sector (the "north" sector shown; the rest are rotations):
-
-- One 45° diagonal ray per hub corner, all swirling the same direction.
-  Two of the four happen to reach sheet corners, two hit edge midspans —
-  the pinwheel is deliberately not mirror-symmetric.
-- Pleat creases run PERPENDICULAR to the sector's outer edge (radially),
-  one per grid line, each hanging from the sheet edge down to the diagonal
-  it dies into. Genders alternate by grid parity, so the sheet accordions.
-- Crossing a diagonal, a pleat continues as a pleat of the next sector
-  rotated 90° — the reverse folds that carry the wrap around the hub
-  corners.
+- One 45° diagonal ray per hub corner, all swirling the same direction —
+  the corner folds that carry the wrap around the hub's corners.
+- Ring pleats run PARALLEL to each sector's outer edge at every grid line,
+  spanning ray to ray. The pinwheel offset chains them into two square
+  spirals: a mountain spiral (the wrapped wall's top ridges) and a valley
+  spiral (its bottom troughs), half a band apart.
+- Folding is "natural folding — rotation of a polygon on a sheet": the hub
+  stays flat (colored side up) and the sheet accordions vertically between
+  the valley and mountain spirals while coiling around the hub, collapsing
+  into a compact block one band tall.
 
 Every cell is split into 4 triangles by an X through its center so the mesh
 can flex; only X halves lying on the four diagonal rays are real creases,
@@ -87,30 +84,32 @@ def generate_flasher(params: FlasherParams) -> CreasePattern:
         key = (p, q) if p <= q else (q, p)
         seg_assignment.setdefault(key, assignment)
 
-    # Hub boundary: the wrap starts here.
-    hub = [(0, 0), (1, 0), (1, 1), (0, 1)]
-    for i in range(4):
-        set_seg(hub[i], hub[(i + 1) % 4], "mountain")
-
-    # Pleats, one sector per sheet edge, each pleat running from the diagonal
-    # it dies into out to its sector's edge. The north/east sectors are
-    # bounded inward by max(k, 1-k) (the NE/NW and NE/SE rays), the south/
-    # west sectors by min(k, 1-k). A pleat keeps its gender as it turns a
-    # hub corner — the wall crease of the wrap is continuous — so gender is
-    # a function of grid parity alone.
-    for k in range(-(m - 1), m):
-        gender = "mountain" if k % 2 == 0 else "valley"
-        near = max(k, 1 - k)  # inner end against the upper/right diagonals
-        far = min(k, 1 - k)  # inner end against the lower/left diagonals
-
-        for y in range(near, m):  # north: vertical pleat x = k
-            set_seg((k, y), (k, y + 1), gender)
-        for y in range(-m, far):  # south: vertical pleat x = k
-            set_seg((k, y), (k, y + 1), gender)
-        for x in range(near, m):  # east: horizontal pleat y = k
-            set_seg((x, k), (x + 1, k), gender)
-        for x in range(-m, far):  # west: horizontal pleat y = k
-            set_seg((x, k), (x + 1, k), gender)
+    # Spiral ring pleats (Zirbel & Lang style, cf. the ORI*botics diagram):
+    # in each sector, creases run PARALLEL to the sector's edge at integer
+    # grid lines, spanning between the two diagonal rays that bound the
+    # sector. Because the rays swirl pinwheel-fashion, ring segments of
+    # adjacent sectors meet offset by one unit — the mountain lines chain
+    # into one square spiral, the valleys into another, half a band apart.
+    #
+    # Gender by distance d from the hub edge: the sheet lies flat on the hub
+    # plane at even rings and rises to the wrapped wall's ridge at odd rings,
+    # so even rings (including the hub boundary, d = 0) are valleys and odd
+    # rings are mountains.
+    for j in range(-(m - 1), m):
+        if j >= 1:
+            d = j - 1
+            gender = "mountain" if d % 2 == 1 else "valley"
+            for x in range(max(1 - j, -m), min(j, m)):  # north: y = j
+                set_seg((x, j), (x + 1, j), gender)
+            for y in range(max(1 - j, -m), min(j, m)):  # east: x = j
+                set_seg((j, y), (j, y + 1), gender)
+        else:
+            d = -j
+            gender = "mountain" if d % 2 == 1 else "valley"
+            for x in range(max(j, -m), min(1 - j, m)):  # south: y = j
+                set_seg((x, j), (x + 1, j), gender)
+            for y in range(max(j, -m), min(1 - j, m)):  # west: x = j
+                set_seg((j, y), (j, y + 1), gender)
 
     # Diagonal rays through cell X's: (t, t) main-diagonal cells for the NE
     # ray and its three rotations. Gender alternates along each ray — the

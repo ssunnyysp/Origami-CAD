@@ -1,19 +1,23 @@
-"""Kinematic wrap target for the square flasher fold.
+"""Kinematic wrap target for the square flasher fold ("natural folding" —
+rotation of a polygon on a sheet).
 
-Every flat vertex is described in "square-polar" coordinates: taxicab radius
-rho = max(|x|, |y|) and square-angle psi in [0, 4) (perimeter position on the
-concentric square through the point, one unit per side, CCW from the (+, -)
-corner). The fold target interpolates each vertex between the flat sheet and
-a wrapped state around a square hub column:
+Every flat vertex is described in "square-polar" coordinates about the hub
+center: taxicab radius rho = max(|x|, |y|) and square-angle psi in [0, 4)
+(perimeter position on the concentric square through the point, one unit per
+side, CCW from the (+, -) corner). The fold target interpolates each vertex
+between the flat sheet and a wrapped state around the hub:
 
-- square-angle advances by wrap_per_ring per ring (the spiral),
+- square-angle advances by wrap_per_ring per ring (the coil),
 - taxicab radius collapses to hub + layer_gap_ratio per ring (the layers),
-- z rises with the flat material consumed (the stowed height).
+- z ACCORDIONS: each one-unit band between rings rises from the hub plane
+  (valley ring) to the wall's ridge height (mountain ring) and back, so the
+  whole sheet folds into a compact block one band tall, wrapped around the
+  flat hub — whose colored top face never moves.
 
-Like the previous circular engine, this target is NOT length-preserving — it
-is only the attractor the PBD solver pulls toward while enforcing that every
-mesh edge keeps its flat (paper) length. The length mismatch is exactly what
-forces the sheet to pleat at the grid creases, the way a real flasher's
+Like the previous engines, this target is NOT length-preserving — it is only
+the attractor the PBD solver pulls toward while enforcing that every mesh
+edge keeps its flat (paper) length. The length mismatch is exactly what
+forces the sheet to pleat at the crease rings, the way a real flasher's
 excess perimeter folds into its pleats.
 """
 
@@ -79,7 +83,14 @@ def compute_target_positions(
     half[inside] = rho[inside]
 
     x, y = point_on_square(psi_folded, half)
-    z = t * params.height_ratio * beyond_hub
+
+    # Vertical accordion: distance-from-hub d rises 0→1 across each band and
+    # the wave direction flips per band, putting even (valley) rings at the
+    # hub plane and odd (mountain) rings at the ridge height.
+    band = np.floor(beyond_hub)
+    frac = beyond_hub - band
+    zig = np.where(band % 2 == 0, frac, 1.0 - frac)
+    z = t * params.height_ratio * zig
 
     out = np.empty((len(flat), 3))
     out[:, 0] = x + HUB_CENTER[0]
