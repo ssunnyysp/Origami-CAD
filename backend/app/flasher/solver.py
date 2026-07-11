@@ -32,9 +32,9 @@ import numpy as np
 from .fold_engine import compute_target_positions
 from .generator import HUB_CENTER, HUB_HALF, CreasePattern, FlasherParams
 
-TARGET_PULL = 0.3  # fraction of the gap to the kinematic target applied per substep
-PROJECT_ITERATIONS = 30  # Jacobi projection passes over all edges per substep
-MAX_FOLDNESS_SUBSTEP = 0.02  # large foldness jumps are subdivided for stability
+TARGET_PULL = 0.15  # fraction of the gap to the kinematic target applied per substep
+PROJECT_ITERATIONS = 50  # Jacobi projection passes over all edges per substep
+MAX_FOLDNESS_SUBSTEP = 0.012  # large foldness jumps are subdivided for stability
 MAX_SUBSTEPS = 80
 
 

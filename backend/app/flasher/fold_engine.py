@@ -1,40 +1,31 @@
-"""Kinematic wrap target for the square flasher fold ("natural folding" —
-rotation of a polygon on a sheet).
+"""Kinematic wrap target for the square flasher fold — the sheet rotates
+around the central hub square and folds down into a CUBE.
 
 Every flat vertex is described in "square-polar" coordinates about the hub
 center: taxicab radius rho = max(|x|, |y|) and square-angle psi in [0, 4)
 (perimeter position on the concentric square through the point, one unit per
 side, CCW from the (+, -) corner). The fold target interpolates each vertex
-between the flat sheet and a wrapped state around the hub:
+between the flat sheet and a folded cube:
 
-- taxicab radius collapses to hub + layer_gap_ratio per ring (the layers),
-- square-angle is rescaled by (rho / half) — the ratio of the point's
-  original perimeter to the shrunken target perimeter — so a ring's
-  circumference maps onto its (smaller) wrapped layer WITHOUT stretching or
-  compressing paper tangentially. This is what actually produces the coil:
-  a ring wrapped onto a much smaller square necessarily winds around it
-  several times to use up its original length, exactly the way real excess
-  paper spirals when wrapped onto a narrower core. (An earlier version used
-  a hand-tuned constant rotation per ring instead of this ratio, which
-  under- or over-wrapped depending on grid size and fought the solver's
-  length constraint hard enough to crumple visibly by full foldness.)
-- z ACCORDIONS: each one-unit band between rings rises from the hub plane
-  (valley ring) to the wall's ridge height (mountain ring) and back. Which
-  way a band rises is read directly from `generator.ring_gender` — the same
-  function the crease pattern uses to color that ring — so the 3D fold can
-  never silently disagree with the drawn mountain/valley lines.
+- the hub square stays flat at z = 0 as the cube's TOP face — everything
+  else rotates and folds around it;
+- beyond the hub, each point wraps onto the cube's square walls, winding
+  around the hub by rho/half turns (paper-length preserving, so the excess
+  paper fits onto the small footprint instead of fighting the solver);
+- z descends monotonically from the hub (top) to the sheet edge (open
+  bottom), so the walls build a cube whose height ≈ its width.
 
-This target is still not EXACTLY length-preserving (arc length along a
-square isn't identical to straight-line chord length once a ring winds past
-a corner), so the PBD solver still has real work reconciling it — but the
-mismatch is now a residual correction rather than the dominant signal.
+The winding target is not EXACTLY length-preserving (square arc length vs
+straight chords once a ring winds past a corner), so the PBD solver still
+reconciles a residual — the folded walls are layered/rough rather than
+crisp flat panels, which is inherent to wrapping this much paper.
 """
 
 from __future__ import annotations
 
 import numpy as np
 
-from .generator import HUB_CENTER, HUB_HALF, FlasherParams, ring_gender
+from .generator import HUB_CENTER, HUB_HALF, FlasherParams
 
 
 def square_polar(flat: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
@@ -75,44 +66,58 @@ def point_on_square(psi: np.ndarray, half: np.ndarray) -> tuple[np.ndarray, np.n
     return x, y
 
 
+# Folded-cube shape targets. The hub square becomes the cube's TOP face; the
+# rest of the sheet spirals DOWN and AROUND it to build the four vertical
+# walls, leaving the underside open. OUTER_HALF is the folded footprint's
+# half-width — the wrapped walls grow from the hub out to this fixed size
+# regardless of grid, so the cube is the same proportions at every
+# resolution, and it is large enough that the wound paper fits without
+# bulging out of plane.
+OUTER_HALF = 1.0
+
+
 def compute_target_positions(
     flat: np.ndarray, params: FlasherParams, foldness: float
 ) -> np.ndarray:
-    """(V, 2) flat positions → (V, 3) target positions at `foldness`."""
+    """(V, 2) flat positions → (V, 3) target positions at `foldness`.
+
+    At foldness 1 the target is a CUBE: the central hub square is the top
+    face at z = 0, and every point beyond the hub is wrapped onto the four
+    walls of a HUB-sized square column, winding around the hub (so the whole
+    fold rotates about the central square) while descending to the open
+    bottom. The winding rate is set by paper-length conservation — a ring of
+    circumference 8·rho wound onto a wall of circumference 8·half must wind
+    rho/half times — so the paper actually fits onto the small footprint
+    instead of the length constraint fighting the collapse.
+    """
     t = min(1.0, max(0.0, foldness))
     centered = flat - np.array(HUB_CENTER)
     rho, psi = square_polar(centered)
     beyond_hub = np.maximum(rho - HUB_HALF, 0.0)  # hub itself never moves
 
-    half_folded = HUB_HALF + params.layer_gap_ratio * beyond_hub
+    reach = float(params.grid_divisions) / 2.0 - HUB_HALF
+    reach = reach if reach > 1e-9 else 1.0
+    frac = np.clip(beyond_hub / reach, 0.0, 1.0)  # 0 at hub, 1 at sheet edge
+
+    # Horizontal: wrap each point onto the folded footprint (hub at the top of
+    # the wall, growing to OUTER_HALF at the sheet edge), winding around the
+    # hub the length-preserving number of turns.
+    half_folded = HUB_HALF + (OUTER_HALF - HUB_HALF) * frac
     half = rho + (half_folded - rho) * t
-    # Keep the hub interior at its true radius (half_folded would inflate it).
     inside = rho <= HUB_HALF
     half[inside] = rho[inside]
-
     safe_half = np.where(half < 1e-9, 1.0, half)
     wrap_ratio = np.where(rho < 1e-9, 1.0, rho / safe_half)
-    psi_folded = psi * wrap_ratio
+    psi_folded = psi * wrap_ratio  # rho/half turns → paper length preserved
+    psi_t = psi + (psi_folded - psi) * t
 
-    x, y = point_on_square(psi_folded, half)
+    x, y = point_on_square(psi_t, half)
 
-    # Vertical accordion: within the band for ring `ring_index`, height rises
-    # 0→1 across the band if that ring is a mountain (its far edge, shared
-    # with the next ring, is the ridge) or falls 1→0 if it's a valley (its
-    # far edge is the trough) — read straight from ring_gender, the same
-    # source the crease-pattern generator uses.
-    band = np.floor(beyond_hub)
-    frac = beyond_hub - band
-    ring_index = (band + 1).astype(int)
-    max_ring = int(ring_index.max()) if len(ring_index) else 0
-    is_mountain = np.array([ring_gender(k) == "mountain" for k in range(max_ring + 1)])
-    mountain_here = is_mountain[ring_index]
-    zig = np.where(mountain_here, frac, 1.0 - frac)
-    # Negative: the hub is pinned at z=0 and must end up on TOP of the folded
-    # block (colored side up, as if resting on a table), so everything else
-    # hangs DOWN from it, leaving the underside open — there is no separate
-    # bottom panel in the mesh at all, just the coiled walls.
-    z = -t * params.height_ratio * zig
+    # Vertical: hub square stays on top (z = 0); paper descends monotonically
+    # to the open bottom so the walls build a cube (height ≈ folded width),
+    # instead of the old accordion that stayed squat.
+    cube_height = 2.0 * OUTER_HALF
+    z = -t * cube_height * frac
 
     out = np.empty((len(flat), 3))
     out[:, 0] = x + HUB_CENTER[0]
