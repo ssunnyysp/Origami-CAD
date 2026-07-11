@@ -13,7 +13,6 @@ export function AppLayout() {
   const roughness = useAppStore((s) => s.roughness);
   const metalness = useAppStore((s) => s.metalness);
   const gridDivisions = useAppStore((s) => s.gridDivisions);
-  const wrapPerRing = useAppStore((s) => s.wrapPerRing);
   const layerGapRatio = useAppStore((s) => s.layerGapRatio);
   const heightRatio = useAppStore((s) => s.heightRatio);
   const [paneOpen, setPaneOpen] = useState(true);
@@ -22,7 +21,7 @@ export function AppLayout() {
     loadPresets().catch((err) => console.error("preset load failed:", err));
   }, [loadPresets]);
 
-  const params = { gridDivisions, wrapPerRing, layerGapRatio, heightRatio };
+  const params = { gridDivisions, layerGapRatio, heightRatio };
 
   return (
     <div className="app-layout">

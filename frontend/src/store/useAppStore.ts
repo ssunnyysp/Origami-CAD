@@ -17,7 +17,6 @@ interface AppState {
   roughness: number;
   metalness: number;
   gridDivisions: number;
-  wrapPerRing: number;
   layerGapRatio: number;
   heightRatio: number;
 
@@ -38,7 +37,6 @@ function applyPreset(preset: FlasherPreset) {
     roughness: preset.roughness,
     metalness: preset.metalness,
     gridDivisions: preset.gridDivisions,
-    wrapPerRing: preset.wrapPerRing,
     layerGapRatio: preset.layerGapRatio,
     heightRatio: preset.heightRatio,
   };
@@ -54,9 +52,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   paperColor: "#d97757",
   roughness: 0.8,
   metalness: 0.02,
-  gridDivisions: 8,
-  wrapPerRing: 1.0,
-  layerGapRatio: 0.15,
+  gridDivisions: 7,
+  layerGapRatio: 0.14,
   heightRatio: 0.85,
 
   loadPresets: async () => {

@@ -42,10 +42,19 @@ HUB_CENTER = (0.0, 0.0)
 HUB_HALF = 0.5
 
 
+def ring_gender(k: int) -> str:
+    """Mountain/valley of ring k (k=1 touches the hub, alternating outward).
+
+    The single source of truth for a ring's fold direction — both the crease
+    pattern (below) and the 3D fold's accordion (fold_engine.py) call this,
+    so the rendered fold can never silently drift from the drawn pattern.
+    """
+    return "mountain" if k % 2 == 1 else "valley"
+
+
 @dataclass(frozen=True)
 class FlasherParams:
     grid_divisions: int  # N; the sheet is N×N unit cells, N odd (single center cell)
-    wrap_per_ring: float  # square-angle sides of extra wrap per ring at full fold
     layer_gap_ratio: float  # wall-to-wall spacing of the wrapped layers, grid units per ring
     height_ratio: float  # stowed height gained per ring of flat material, grid units
 
@@ -123,7 +132,7 @@ def generate_flasher(params: FlasherParams) -> CreasePattern:
     # ridge — then alternates valley/mountain.
     for k in range(1, m + 1):
         lo, hi = low(k), high(k)
-        gender = "mountain" if k % 2 == 1 else "valley"
+        gender = ring_gender(k)
         for x in range(lo, hi):
             set_seg((x, lo), (x + 1, lo), gender)  # bottom
             set_seg((x, hi), (x + 1, hi), gender)  # top
@@ -139,7 +148,7 @@ def generate_flasher(params: FlasherParams) -> CreasePattern:
     diag_cells: dict[tuple[int, int], tuple[str, str]] = {}  # cell -> (which, gender)
     for k in range(0, m):
         lo, hi = low(k), high(k)
-        gender = "mountain" if (k + 1) % 2 == 1 else "valley"
+        gender = ring_gender(k + 1)
         diag_cells[(hi, hi)] = ("main", gender)  # NE corner
         diag_cells[(lo - 1, lo - 1)] = ("main", gender)  # SW corner
         diag_cells[(hi, lo - 1)] = ("anti", gender)  # SE corner

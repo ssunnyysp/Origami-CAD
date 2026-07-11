@@ -18,7 +18,6 @@ class GeometryRequest(BaseModel):
     model_config = {"frozen": True}
 
     gridDivisions: int = Field(ge=7, le=41)
-    wrapPerRing: float = Field(default=1.0, ge=0, le=4)
     layerGapRatio: float = Field(default=0.08, gt=0, le=0.5)
     heightRatio: float = Field(default=0.25, ge=0, le=1)
 
@@ -34,7 +33,6 @@ class GeometryRequest(BaseModel):
     def to_params(self) -> FlasherParams:
         return FlasherParams(
             grid_divisions=self.gridDivisions,
-            wrap_per_ring=self.wrapPerRing,
             layer_gap_ratio=self.layerGapRatio,
             height_ratio=self.heightRatio,
         )

@@ -48,11 +48,10 @@ export interface CreasePattern {
 }
 
 // Square-flasher parameters. The sheet is always a square, gridDivisions×
-// gridDivisions unit cells around a central 2×2 hub. Body of
-// POST /api/flasher/geometry.
+// gridDivisions unit cells around a single central hub cell (gridDivisions
+// must be odd). Body of POST /api/flasher/geometry.
 export interface FlasherParams {
-  gridDivisions: number; // N, even; Shafer's Big Bang uses 32
-  wrapPerRing: number; // square-angle sides of extra wrap per ring at full fold
+  gridDivisions: number; // N, odd; Shafer's Big Bang uses 31
   layerGapRatio: number; // spacing of the wrapped layers, grid units per ring
   heightRatio: number; // stowed height gained per ring of flat material
 }

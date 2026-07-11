@@ -7,25 +7,34 @@ center: taxicab radius rho = max(|x|, |y|) and square-angle psi in [0, 4)
 side, CCW from the (+, -) corner). The fold target interpolates each vertex
 between the flat sheet and a wrapped state around the hub:
 
-- square-angle advances by wrap_per_ring per ring (the coil),
 - taxicab radius collapses to hub + layer_gap_ratio per ring (the layers),
+- square-angle is rescaled by (rho / half) — the ratio of the point's
+  original perimeter to the shrunken target perimeter — so a ring's
+  circumference maps onto its (smaller) wrapped layer WITHOUT stretching or
+  compressing paper tangentially. This is what actually produces the coil:
+  a ring wrapped onto a much smaller square necessarily winds around it
+  several times to use up its original length, exactly the way real excess
+  paper spirals when wrapped onto a narrower core. (An earlier version used
+  a hand-tuned constant rotation per ring instead of this ratio, which
+  under- or over-wrapped depending on grid size and fought the solver's
+  length constraint hard enough to crumple visibly by full foldness.)
 - z ACCORDIONS: each one-unit band between rings rises from the hub plane
-  (valley ring) to the wall's ridge height (mountain ring) and back, so the
-  whole sheet folds into a compact block one band tall, wrapped around the
-  flat hub — whose colored top face never moves.
+  (valley ring) to the wall's ridge height (mountain ring) and back. Which
+  way a band rises is read directly from `generator.ring_gender` — the same
+  function the crease pattern uses to color that ring — so the 3D fold can
+  never silently disagree with the drawn mountain/valley lines.
 
-Like the previous engines, this target is NOT length-preserving — it is only
-the attractor the PBD solver pulls toward while enforcing that every mesh
-edge keeps its flat (paper) length. The length mismatch is exactly what
-forces the sheet to pleat at the crease rings, the way a real flasher's
-excess perimeter folds into its pleats.
+This target is still not EXACTLY length-preserving (arc length along a
+square isn't identical to straight-line chord length once a ring winds past
+a corner), so the PBD solver still has real work reconciling it — but the
+mismatch is now a residual correction rather than the dominant signal.
 """
 
 from __future__ import annotations
 
 import numpy as np
 
-from .generator import HUB_CENTER, HUB_HALF, FlasherParams
+from .generator import HUB_CENTER, HUB_HALF, FlasherParams, ring_gender
 
 
 def square_polar(flat: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
@@ -75,22 +84,35 @@ def compute_target_positions(
     rho, psi = square_polar(centered)
     beyond_hub = np.maximum(rho - HUB_HALF, 0.0)  # hub itself never moves
 
-    psi_folded = psi + t * params.wrap_per_ring * beyond_hub
     half_folded = HUB_HALF + params.layer_gap_ratio * beyond_hub
     half = rho + (half_folded - rho) * t
     # Keep the hub interior at its true radius (half_folded would inflate it).
     inside = rho <= HUB_HALF
     half[inside] = rho[inside]
 
+    safe_half = np.where(half < 1e-9, 1.0, half)
+    wrap_ratio = np.where(rho < 1e-9, 1.0, rho / safe_half)
+    psi_folded = psi * wrap_ratio
+
     x, y = point_on_square(psi_folded, half)
 
-    # Vertical accordion: distance-from-hub d rises 0→1 across each band and
-    # the wave direction flips per band, putting even (valley) rings at the
-    # hub plane and odd (mountain) rings at the ridge height.
+    # Vertical accordion: within the band for ring `ring_index`, height rises
+    # 0→1 across the band if that ring is a mountain (its far edge, shared
+    # with the next ring, is the ridge) or falls 1→0 if it's a valley (its
+    # far edge is the trough) — read straight from ring_gender, the same
+    # source the crease-pattern generator uses.
     band = np.floor(beyond_hub)
     frac = beyond_hub - band
-    zig = np.where(band % 2 == 0, frac, 1.0 - frac)
-    z = t * params.height_ratio * zig
+    ring_index = (band + 1).astype(int)
+    max_ring = int(ring_index.max()) if len(ring_index) else 0
+    is_mountain = np.array([ring_gender(k) == "mountain" for k in range(max_ring + 1)])
+    mountain_here = is_mountain[ring_index]
+    zig = np.where(mountain_here, frac, 1.0 - frac)
+    # Negative: the hub is pinned at z=0 and must end up on TOP of the folded
+    # block (colored side up, as if resting on a table), so everything else
+    # hangs DOWN from it, leaving the underside open — there is no separate
+    # bottom panel in the mesh at all, just the coiled walls.
+    z = -t * params.height_ratio * zig
 
     out = np.empty((len(flat), 3))
     out[:, 0] = x + HUB_CENTER[0]
