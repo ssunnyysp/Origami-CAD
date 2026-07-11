@@ -43,11 +43,10 @@ HUB_HALF = 0.5
 
 
 def ring_gender(k: int) -> str:
-    """Mountain/valley of ring k (k=1 touches the hub, alternating outward).
-
-    The single source of truth for a ring's fold direction — both the crease
-    pattern (below) and the 3D fold's accordion (fold_engine.py) call this,
-    so the rendered fold can never silently drift from the drawn pattern.
+    """Mountain/valley of ring k's own boundary crease (k=1 touches the hub,
+    alternating outward). solver.py folds each crease by the angle read
+    straight off this pattern's edge assignments, so the fold can never
+    silently drift from the drawn pattern.
     """
     return "mountain" if k % 2 == 1 else "valley"
 
@@ -126,33 +125,45 @@ def generate_flasher(params: FlasherParams) -> CreasePattern:
     for i in range(4):
         set_seg(hub[i], hub[(i + 1) % 4], "mountain")
 
-    # Ring pleats k=1..m: simple concentric squares parallel to the sheet's
-    # edges (matching the ORI*botics diagram, not spokes). Gender alternates
-    # outward: ring 1 (touching the hub) is a mountain — the wall's first
-    # ridge — then alternates valley/mountain.
+    # Ring pleats k=1..m: each ring's 4 sides are trimmed one unit short at a
+    # consistently-rotated (CCW) corner and rejoined there by a diagonal cut
+    # (below). That single consistent trim/cut is what gives the pattern a
+    # CHIRALITY — a fixed handedness — instead of the mirror-symmetric plain
+    # square rings this generator used to draw. A mirror-symmetric pattern
+    # has no preferred turning direction, so folding it only domes; a chiral
+    # one lets every ring rotate the SAME way around the hub simultaneously,
+    # the real flasher twist motion.
     for k in range(1, m + 1):
         lo, hi = low(k), high(k)
         gender = ring_gender(k)
-        for x in range(lo, hi):
-            set_seg((x, lo), (x + 1, lo), gender)  # bottom
-            set_seg((x, hi), (x + 1, hi), gender)  # top
-        for y in range(lo, hi):
-            set_seg((lo, y), (lo, y + 1), gender)  # left
-            set_seg((hi, y), (hi, y + 1), gender)  # right
+        for x in range(lo, hi - 1):
+            set_seg((x, hi), (x + 1, hi), gender)  # top, trimmed at right (NE) end
+        for y in range(lo + 1, hi):
+            set_seg((hi, y), (hi, y + 1), gender)  # right, trimmed at bottom (SE) end
+        for x in range(lo + 1, hi):
+            set_seg((x, lo), (x + 1, lo), gender)  # bottom, trimmed at left (SW) end
+        for y in range(lo, hi - 1):
+            set_seg((lo, y), (lo, y + 1), gender)  # left, trimmed at top (NW) end
 
-    # The two full diagonals, corner-to-corner through the hub's center,
-    # continuing outward from each hub corner. Each unit-cell segment along
-    # a diagonal connects ring k's corner to ring (k+1)'s corner, so it
-    # takes ring (k+1)'s gender — the diagonal is the reverse fold that
-    # carries that ring's crease around the hub's corner.
+    # Chiral corner cuts: the unit cell at each trimmed corner is split by ONE
+    # diagonal (not the symmetric X the old generator drew), so it both closes
+    # the gap left by the trim AND turns the boundary — every corner turns the
+    # same rotational way, which is what gives the pattern a fixed handedness.
     diag_cells: dict[tuple[int, int], tuple[str, str]] = {}  # cell -> (which, gender)
-    for k in range(0, m):
+    for k in range(1, m + 1):
         lo, hi = low(k), high(k)
-        gender = ring_gender(k + 1)
-        diag_cells[(hi, hi)] = ("main", gender)  # NE corner
-        diag_cells[(lo - 1, lo - 1)] = ("main", gender)  # SW corner
-        diag_cells[(hi, lo - 1)] = ("anti", gender)  # SE corner
-        diag_cells[(lo - 1, hi)] = ("anti", gender)  # NW corner
+        ring_g = ring_gender(k)
+        # The corner cut is the OPPOSITE gender from the ring's own boundary —
+        # it is a genderless (in Shafer's sense) reverse fold, and using the
+        # opposite sense is what keeps every corner turning the SAME
+        # rotational way. Using the same gender as the boundary (this
+        # generator's earlier bug) makes alternating rings twist in opposite
+        # directions instead of rotating together.
+        diag_g = "valley" if ring_g == "mountain" else "mountain"
+        diag_cells[(hi - 1, hi - 1)] = ("main", diag_g)  # NE gap
+        diag_cells[(hi - 1, lo)] = ("anti", diag_g)  # SE gap
+        diag_cells[(lo, lo)] = ("main", diag_g)  # SW gap
+        diag_cells[(lo, hi - 1)] = ("anti", diag_g)  # NW gap
 
     def grid_segment_assignment(p: tuple[int, int], q: tuple[int, int]) -> str:
         (x1, y1), (x2, y2) = p, q

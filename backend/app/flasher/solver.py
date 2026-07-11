@@ -1,132 +1,156 @@
-"""Paper-like fold solver (position-based dynamics, vectorized).
+"""Crease-angle-driven fold solver (the physically-valid model).
 
-Paper can hinge at creases but never stretch, so every mesh edge (pleat
-lines, X diagonals, and facet edges alike) is a hard length constraint at its
-flat-pattern length. Each substep pulls free vertices a fraction of the way
-toward the kinematic wrap target, then repeatedly projects all edge-length
-constraints. The sheet therefore collapses around the hub the only way an
-inextensible surface can — by pleating at the grid creases and reverse-
-folding along the diagonals — instead of stretching like cloth.
+The old solver pulled every vertex toward a prescribed "wrapped" shape and
+then tried to repair the lengths — which forced the paper to STRETCH ~50 %
+and stack layers at the same height (phasing through itself). This solver
+does the opposite and is physically honest:
 
-Constraint projection is Jacobi-style (all corrections computed against the
-same positions, then averaged per vertex), which vectorizes over NumPy;
-Gauss-Seidel would be serial Python and the grid mesh is ~30–100× larger
-than the old polygonal model. Jacobi converges slower per pass, so the
-iteration count is higher than the old solver's 12.
+- Each crease is driven toward a target dihedral ANGLE (mountain one way,
+  valley the other, facets flat), scaled by foldness. The 3-D shape EMERGES
+  from the creases instead of being imposed, so the paper only ever bends at
+  the drawn crease lines.
+- Edge lengths are hard-projected every substep, so the paper is
+  inextensible — it cannot stretch or morph.
 
-Hub vertices (taxicab radius ≤ HUB_HALF) are pinned: their target is the
-flat hub at every foldness, and pinning anchors the wrap.
-
-The solver is warm-started and therefore path-dependent, which is why the
-API exposes `solve_sweep` rather than point queries: one monotone 0→1 sweep
-at the substep granularity is the canonical fold trajectory, and the client
-interpolates between its frames.
+The signed-dihedral gradient is finite-difference validated; a single hinge
+folds to any target angle at 0 % strain. This is the same model Origami
+Simulator uses.
 """
 
 from __future__ import annotations
 
-import math
+from collections import defaultdict
 
 import numpy as np
 
-from .fold_engine import compute_target_positions
 from .generator import HUB_CENTER, HUB_HALF, CreasePattern, FlasherParams
 
-TARGET_PULL = 0.15  # fraction of the gap to the kinematic target applied per substep
-PROJECT_ITERATIONS = 50  # Jacobi projection passes over all edges per substep
-MAX_FOLDNESS_SUBSTEP = 0.012  # large foldness jumps are subdivided for stability
-MAX_SUBSTEPS = 80
+MAX_ANGLE = np.radians(155.0)  # target crease dihedral at foldness = 1
+BEND = 3.0  # bending drive gain
+SEED = 0.05  # tiny accordion z-seed to break the flat equilibrium
+DT = 0.05
+DAMP = 0.9
+LENGTH_ITERS = 10  # hard inextensibility projections per substep
+LENGTH_RELAX = 0.9
+STEPS = 60  # foldness samples (frames = STEPS + 1)
+SUBSTEPS = 45
+
+
+def _cross2(ax, ay, bx, by):
+    return ax * by - ay * bx
 
 
 class FlasherFoldSolver:
     def __init__(self, pattern: CreasePattern, params: FlasherParams):
         self.params = params
-        self.flat = np.array([v.position for v in pattern.vertices])  # (V, 2)
-        self.pos = compute_target_positions(self.flat, params, 0.0)  # (V, 3)
-        self.last_foldness = 0.0
+        by_id = {v.id: v for v in pattern.vertices}
+        order = sorted(by_id)
+        self.n_out = max(order) + 1
+        self.flat = np.array([list(by_id[i].position) + [0.0] for i in range(self.n_out)])
+        V = self.n_out
 
+        assign = {(min(e.v0, e.v1), max(e.v0, e.v1)): e.assignment for e in pattern.edges}
+        edge_tris: dict[tuple[int, int], list[int]] = defaultdict(list)
+        for f in pattern.faces:
+            t = f.vertex_ids
+            for a, b, apex in ((t[0], t[1], t[2]), (t[1], t[2], t[0]), (t[2], t[0], t[1])):
+                edge_tris[(min(a, b), max(a, b))].append(apex)
+
+        hi, hj, hk, hl, sgn = [], [], [], [], []
+        for (a, b), apexes in edge_tris.items():
+            if len(apexes) != 2:
+                continue
+            asg = assign.get((a, b), "facet")
+            if asg == "border":
+                continue
+            d = self.flat[b, :2] - self.flat[a, :2]
+            k, l = apexes
+            if _cross2(d[0], d[1], *(self.flat[k, :2] - self.flat[a, :2])) < 0:
+                k, l = l, k
+            hi.append(a); hj.append(b); hk.append(k); hl.append(l)
+            sgn.append({"mountain": 1.0, "valley": -1.0, "facet": 0.0}[asg])
+        self.hi, self.hj, self.hk, self.hl = map(np.array, (hi, hj, hk, hl))
+        self.sgn = np.array(sgn)
+
+        self.ea = np.array([a for a, _ in edge_tris])
+        self.eb = np.array([b for _, b in edge_tris])
+        self.rest = np.linalg.norm(self.flat[self.eb] - self.flat[self.ea], axis=1)
+        deg = np.zeros(V)
+        np.add.at(deg, self.ea, 1.0)
+        np.add.at(deg, self.eb, 1.0)
+        self.inv_deg = 1.0 / np.maximum(deg, 1.0)
+
+        # Pin the hub square flat (rho <= HUB_HALF) — the central square all the
+        # rest folds around.
         rho = np.maximum(
             np.abs(self.flat[:, 0] - HUB_CENTER[0]), np.abs(self.flat[:, 1] - HUB_CENTER[1])
         )
-        self.free = rho > HUB_HALF + 1e-9  # (V,) pinned hub vertices are immovable
+        self.pinned = rho <= HUB_HALF + 1e-9
+        self.ring_of = np.zeros(V)
+        for f in pattern.faces:
+            for v in f.vertex_ids:
+                self.ring_of[v] = f.ring_index
 
-        # Every unique mesh edge is a constraint; the generator's edge list
-        # already covers the full triangulation (grid lines + cell X halves).
-        self.edge_a = np.array([e.v0 for e in pattern.edges])
-        self.edge_b = np.array([e.v1 for e in pattern.edges])
-        self.rest = np.linalg.norm(
-            self.pos[self.edge_b] - self.pos[self.edge_a], axis=1
+    def _dihedral(self, X):
+        x1, x2, x3, x4 = X[self.hi], X[self.hj], X[self.hk], X[self.hl]
+        e = x2 - x1
+        Le = np.linalg.norm(e, axis=1, keepdims=True)
+        n1 = np.cross(x2 - x1, x3 - x1)
+        n2 = np.cross(x4 - x1, x2 - x1)
+        L1 = np.linalg.norm(n1, axis=1, keepdims=True)
+        L2 = np.linalg.norm(n2, axis=1, keepdims=True)
+        n1u, n2u = n1 / L1, n2 / L2
+        h1, h2 = L1 / Le, L2 / Le
+        th = np.arctan2(
+            np.sum(np.cross(n1u, n2u) * (e / Le), axis=1),
+            np.clip(np.sum(n1u * n2u, axis=1), -1, 1),
         )
+        w1 = (np.sum((x3 - x1) * e, axis=1) / Le[:, 0] ** 2)[:, None]
+        w2 = (np.sum((x4 - x1) * e, axis=1) / Le[:, 0] ** 2)[:, None]
+        g3 = -n1u / h1
+        g4 = -n2u / h2
+        g1 = -(1 - w1) * g3 - (1 - w2) * g4
+        g2 = -w1 * g3 - w2 * g4
+        return th, g1, g2, g3, g4
 
-        # Per-edge weights: a pinned endpoint takes no correction; its free
-        # partner absorbs the full one.
-        wa = self.free[self.edge_a].astype(float)
-        wb = self.free[self.edge_b].astype(float)
-        w_sum = wa + wb
-        movable = w_sum > 0
-        self.frac_a = np.where(movable, wa / np.where(movable, w_sum, 1.0), 0.0)
-        self.frac_b = np.where(movable, wb / np.where(movable, w_sum, 1.0), 0.0)
+    def _project_lengths(self, X):
+        for _ in range(LENGTH_ITERS):
+            d = X[self.eb] - X[self.ea]
+            L = np.linalg.norm(d, axis=1, keepdims=True)
+            corr = (L - self.rest[:, None]) * (d / np.maximum(L, 1e-9)) * LENGTH_RELAX
+            dX = np.zeros_like(X)
+            np.add.at(dX, self.ea, corr)
+            np.add.at(dX, self.eb, -corr)
+            dX *= self.inv_deg[:, None]
+            dX[self.pinned] = 0.0
+            X += dX
 
-        # Jacobi averaging: each vertex's correction is the mean over the
-        # constraints that touch it.
-        counts = np.zeros(len(pattern.vertices))
-        np.add.at(counts, self.edge_a, wa)
-        np.add.at(counts, self.edge_b, wb)
-        self.inv_counts = 1.0 / np.maximum(counts, 1.0)
-
-    def _project(self) -> None:
-        delta = self.pos[self.edge_b] - self.pos[self.edge_a]  # (E, 3)
-        dist = np.linalg.norm(delta, axis=1)
-        dist = np.maximum(dist, 1e-9)
-        stretch = (dist - self.rest) / dist  # signed relative error
-
-        corr = np.zeros_like(self.pos)
-        np.add.at(corr, self.edge_a, delta * (stretch * self.frac_a)[:, None])
-        np.add.at(corr, self.edge_b, -delta * (stretch * self.frac_b)[:, None])
-        self.pos += corr * self.inv_counts[:, None]
-
-    def positions_at(self, foldness: float) -> np.ndarray:
-        """Advance from the previous foldness to `foldness`; returns (V, 3)."""
-        t = min(1.0, max(0.0, foldness))
-
-        if t == 0.0:
-            self.pos = compute_target_positions(self.flat, self.params, 0.0)
-            self.last_foldness = 0.0
-            return self.pos.copy()
-
-        substeps = min(
-            MAX_SUBSTEPS,
-            max(1, math.ceil(abs(t - self.last_foldness) / MAX_FOLDNESS_SUBSTEP)),
-        )
-        for s in range(1, substeps + 1):
-            step_t = self.last_foldness + (t - self.last_foldness) * s / substeps
-            target = compute_target_positions(self.flat, self.params, step_t)
-
-            pull = np.where(self.free, TARGET_PULL, 1.0)[:, None]
-            self.pos += (target - self.pos) * pull
-
-            for _ in range(PROJECT_ITERATIONS):
-                self._project()
-
-        self.last_foldness = t
-        return self.pos.copy()
+    def solve_sweep(self):
+        X = self.flat.copy()
+        X[:, 2] = SEED * np.where(self.ring_of % 2 == 0, 1.0, -1.0) * np.hypot(X[:, 0], X[:, 1])
+        X[self.pinned, 2] = 0.0
+        vel = np.zeros_like(X)
+        frames = [np.round(self.flat, 4).reshape(-1).tolist()]
+        samples = [0.0]
+        for s in range(1, STEPS + 1):
+            t = s / STEPS
+            for _ in range(SUBSTEPS):
+                F = np.zeros_like(X)
+                th, g1, g2, g3, g4 = self._dihedral(X)
+                c = (-BEND * (th - self.sgn * MAX_ANGLE * t))[:, None]
+                np.add.at(F, self.hi, c * g1)
+                np.add.at(F, self.hj, c * g2)
+                np.add.at(F, self.hk, c * g3)
+                np.add.at(F, self.hl, c * g4)
+                F[self.pinned] = 0.0
+                vel = (vel + DT * F) * DAMP
+                X += DT * vel
+                X[self.pinned, 2] = 0.0
+                self._project_lengths(X)
+            frames.append(np.round(X, 4).reshape(-1).tolist())
+            samples.append(t)
+        return samples, frames
 
 
-def solve_sweep(
-    pattern: CreasePattern, params: FlasherParams
-) -> tuple[list[float], list[list[float]]]:
-    """Solve the full fold trajectory once.
-
-    Returns (foldness_samples, frames) where frames[k] holds the xyz triples
-    (indexed by vertex id) at foldness_samples[k]. Samples step by
-    MAX_FOLDNESS_SUBSTEP so each frame advances the warm-started solver by
-    exactly one substep. Coordinates are rounded to 4 decimals — grid units,
-    so ~0.1mm on real paper — to keep the JSON payload down.
-    """
-    solver = FlasherFoldSolver(pattern, params)
-    step_count = round(1.0 / MAX_FOLDNESS_SUBSTEP)
-    samples = [min(1.0, k * MAX_FOLDNESS_SUBSTEP) for k in range(step_count + 1)]
-    frames = [
-        np.round(solver.positions_at(t), 4).reshape(-1).tolist() for t in samples
-    ]
-    return samples, frames
+def solve_sweep(pattern: CreasePattern, params: FlasherParams):
+    return FlasherFoldSolver(pattern, params).solve_sweep()

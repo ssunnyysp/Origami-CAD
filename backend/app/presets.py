@@ -4,10 +4,9 @@
 cell (an even count splits the center between four cells with no true
 middle). Preset names show gridDivisions directly.
 
-The coil (how many times a ring winds around before it fits its wrapped
-layer) is no longer a tunable parameter — it falls straight out of paper-
-length conservation in fold_engine.py, so it's always exactly right for the
-given layerGapRatio.
+`layerGapRatio` and `heightRatio` are accepted for API compatibility but are
+currently unused: the fold is driven entirely by the crease pattern's own
+mountain/valley angles (see solver.py), not by a prescribed wrap shape.
 """
 
 PRESETS: list[dict] = [
