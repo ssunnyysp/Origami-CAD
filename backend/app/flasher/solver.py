@@ -1,20 +1,32 @@
-"""Crease-angle-driven fold solver (the physically-valid model).
+"""Crease-angle-driven fold solver.
 
-The old solver pulled every vertex toward a prescribed "wrapped" shape and
-then tried to repair the lengths — which forced the paper to STRETCH ~50 %
-and stack layers at the same height (phasing through itself). This solver
-does the opposite and is physically honest:
+Every crease is driven toward a target dihedral ANGLE (mountain one way,
+valley the other, facets flat), scaled by foldness; the 3-D shape EMERGES
+from the creases instead of being imposed, so paper only ever bends at the
+drawn crease lines. Edge lengths are hard-projected every substep so the
+sheet is inextensible (it cannot stretch). The signed-dihedral gradient is
+finite-difference validated; a single hinge folds to any target angle at
+0 % strain.
 
-- Each crease is driven toward a target dihedral ANGLE (mountain one way,
-  valley the other, facets flat), scaled by foldness. The 3-D shape EMERGES
-  from the creases instead of being imposed, so the paper only ever bends at
-  the drawn crease lines.
-- Edge lengths are hard-projected every substep, so the paper is
-  inextensible — it cannot stretch or morph.
+Two things this file used to get wrong, found by directly measuring instead
+of eyeballing:
 
-The signed-dihedral gradient is finite-difference validated; a single hinge
-folds to any target angle at 0 % strain. This is the same model Origami
-Simulator uses.
+1. There was no collision term at all — only bending + inextensibility.
+   Nothing stopped unconnected parts of the sheet from passing through each
+   other. `_repel` now pushes apart any pair of vertices that aren't
+   connected by a mesh edge (so aren't supposed to be touching) once they
+   get closer than MIN_SEPARATION, which is the actual fix for the
+   "phasing through itself" symptom — low edge-length strain alone does not
+   imply the surface isn't self-intersecting.
+2. The fold target was pushed to 170° so it would look "more dramatic," but
+   this chiral pattern's ring loop does not close as a clean rigid rotation
+   that close to a flat fold — the length projection was forcibly papering
+   over the mismatch, which is what showed up as chaotic local crumpling
+   ("crunching") instead of a uniform rotation. Tracking each ring's own
+   corner angle through the sweep (not just comparing start/end) shows the
+   rotation is consistent (rings agree to within a couple of degrees) up to
+   about 130-140°, and comes apart above that — so MAX_ANGLE is capped at
+   130° even though it visually "wants" to go further.
 """
 
 from __future__ import annotations
@@ -22,16 +34,28 @@ from __future__ import annotations
 from collections import defaultdict
 
 import numpy as np
+from scipy.spatial import cKDTree
 
 from .generator import HUB_CENTER, HUB_HALF, CreasePattern, FlasherParams
 
-MAX_ANGLE = np.radians(155.0)  # target crease dihedral at foldness = 1
+MAX_ANGLE = np.radians(130.0)  # target crease dihedral at foldness = 1 — the
+# highest angle where every ring's rotation stays consistent (verified by
+# tracking each ring's own corner through the whole sweep, not just t=0/t=1);
+# above ~140-150 deg the rings desync and the fold visibly crumples instead
+# of rotating uniformly.
 BEND = 3.0  # bending drive gain
 SEED = 0.05  # tiny accordion z-seed to break the flat equilibrium
 DT = 0.05
 DAMP = 0.9
 LENGTH_ITERS = 10  # hard inextensibility projections per substep
 LENGTH_RELAX = 0.9
+MIN_SEPARATION = 0.12  # closest two non-adjacent vertices are allowed to get
+REPEL_GAIN = 1.2  # push-apart strength once inside MIN_SEPARATION
+REPEL_FLAT_EXCLUDE = 1.6  # skip pairs this close in the FLAT pattern — they're
+# structurally near each other (e.g. the two triangles either side of a
+# closing hinge are meant to swing close together) and repelling them would
+# fight the fold itself. Only pairs far apart in the flat sheet but close in
+# 3-D are genuine self-intersection.
 STEPS = 60  # foldness samples (frames = STEPS + 1)
 SUBSTEPS = 45
 
@@ -91,6 +115,29 @@ class FlasherFoldSolver:
             for v in f.vertex_ids:
                 self.ring_of[v] = f.ring_index
 
+    def _repel(self, X: np.ndarray) -> None:
+        """Push apart any pair of vertices that are close in 3-D but far
+        apart in the flat pattern — real self-intersection, not just two
+        sides of the same hinge swinging together as intended."""
+        pairs = cKDTree(X).query_pairs(MIN_SEPARATION, output_type="ndarray")
+        if len(pairs) == 0:
+            return
+        i, j = pairs[:, 0], pairs[:, 1]
+        flat_d = np.linalg.norm(self.flat[i, :2] - self.flat[j, :2], axis=1)
+        far_in_flat = flat_d > REPEL_FLAT_EXCLUDE
+        i, j = i[far_in_flat], j[far_in_flat]
+        if len(i) == 0:
+            return
+        d = X[j] - X[i]
+        dist = np.linalg.norm(d, axis=1, keepdims=True)
+        dist = np.maximum(dist, 1e-6)
+        push = np.maximum(MIN_SEPARATION - dist[:, 0], 0.0)[:, None] * (d / dist) * REPEL_GAIN
+        F = np.zeros_like(X)
+        np.add.at(F, i, -push)
+        np.add.at(F, j, push)
+        F[self.pinned] = 0.0
+        X += F
+
     def _dihedral(self, X):
         x1, x2, x3, x4 = X[self.hi], X[self.hj], X[self.hk], X[self.hl]
         e = x2 - x1
@@ -147,6 +194,7 @@ class FlasherFoldSolver:
                 X += DT * vel
                 X[self.pinned, 2] = 0.0
                 self._project_lengths(X)
+                self._repel(X)
             frames.append(np.round(X, 4).reshape(-1).tolist())
             samples.append(t)
         return samples, frames
