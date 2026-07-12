@@ -32,3 +32,4 @@ dist-ssr
 
 # Claude Code local config (dev server launch config etc.)
 .claude/
+.CLAUDE.md
