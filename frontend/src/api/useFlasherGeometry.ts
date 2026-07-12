@@ -7,11 +7,11 @@ import { fetchGeometry } from "./client";
 // changes never blank the canvas.
 export function useFlasherGeometry(params: FlasherParams): FlasherGeometry | null {
   const [geometry, setGeometry] = useState<FlasherGeometry | null>(null);
-  const { gridDivisions, layerGapRatio, heightRatio } = params;
+  const { sides, rings, pleatRatio, twistRatio } = params;
 
   useEffect(() => {
     let stale = false;
-    fetchGeometry({ gridDivisions, layerGapRatio, heightRatio })
+    fetchGeometry({ sides, rings, pleatRatio, twistRatio })
       .then((g) => {
         if (!stale) setGeometry(g);
       })
@@ -21,7 +21,7 @@ export function useFlasherGeometry(params: FlasherParams): FlasherGeometry | nul
     return () => {
       stale = true;
     };
-  }, [gridDivisions, layerGapRatio, heightRatio]);
+  }, [sides, rings, pleatRatio, twistRatio]);
 
   return geometry;
 }

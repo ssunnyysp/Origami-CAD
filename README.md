@@ -6,16 +6,16 @@ twist-fold tessellations. A Python (FastAPI) backend owns all the geometry math;
 
 ## What it does
 
-- Generates square-flasher crease patterns parametrically: a SQUARE sheet on an N×N grid
-  around a central hub, in the style of Jeremy Shafer's flashers (Big Bang = 32×32)
+- Generates hexagon/octagon-hub twist-fold flasher crease patterns parametrically: a
+  regular n-gon hub surrounded by concentric rings of trapezoidal panels, each ring
+  twisted by a fixed angle relative to the ring inside it — the standard flasher
+  construction (Shafer, Lang's "twist" family)
 - Animates stow/deploy live via a "foldness" slider (0 = flat/deployed, 1 = wrapped/stowed)
 - Draws a CAD-style crease overlay — mountain folds blue (paper folds up), valley folds red
   (paper folds down), border dark — fading out as the model folds
 - Renders two-sided paper: the top face takes the chosen color, the underside stays plain —
   like real origami paper
-- Ships with 4 curated presets; the default Simple Flasher (8×8) folds from a flat square
-  into a cube-proportioned block, and the app opens on the folded form so dragging the
-  slider unfolds it
+- Ships with 4 curated presets (two hexagon, two octagon hubs at different ring counts)
 
 ## Architecture
 
@@ -39,18 +39,24 @@ API:
 
 ## How folding works
 
-The crease pattern is the classic flasher structure: the sheet's two main diagonals split it
-into 4 triangular quadrants; in each quadrant the grid lines parallel to the near edge are the
-pleats, alternating mountain/valley; crossing a diagonal flips every pleat's gender (Shafer:
-"every crease should get mountained and valleyed"), which is what turns the collapse into a
-spiral wrap instead of a flat twist fold. Cells along the diagonals carry X creases — the
-reverse folds that turn a pleat 90° around the hub corner.
+The crease pattern is a true twist fold: a regular n-gon hub, surrounded by `rings`
+concentric rings of trapezoidal panels. Ring k's corners are ring (k-1)'s corners scaled
+outward and rotated by a fixed twist angle — any nonzero twist makes the pattern chiral
+(not mirror-symmetric), which is what lets every ring rotate the same way simultaneously
+when folded (the actual flasher wrap motion) instead of only doming. Circumferential
+creases alternate mountain/valley ring-to-ring; radial "spoke" creases alternate
+mountain/valley around each ring.
 
-To fold, every vertex is attracted toward a kinematic target in "square-polar" coordinates
-(taxicab radius + perimeter position) wrapping around the hub column, while a position-based
-dynamics pass enforces that every mesh edge keeps its flat-pattern length — paper folds, it
-doesn't stretch — so the sheet collapses into the compact wrapped square by pleating at the
-creases. `docs/FLASHER_NOTES.md` describes the earlier polygonal model this replaced.
+Folding is solved server-side in two stages: a closed-form rigid forward-kinematics pass
+(walking the crease pattern's face-adjacency spanning tree from the pinned hub outward,
+rotating each panel rigidly about its crease) predicts a qualitatively-correct pose from a
+single shared fold-angle schedule, then a short, deterministic length-projection +
+collision-repulsion pass (no random seed, no velocity/damping physics) corrects the
+residual gap between that prediction and an exact rigid solve. See `solver.py`'s module
+docstring for why an exact closed-form solve isn't implemented, and
+`scripts/validate_flasher.py` for how fold quality (strain, self-intersection, monotonic
+gathering) is measured. `docs/FLASHER_NOTES.md` describes the earlier polygonal model this
+replaced.
 
 ## Project layout
 

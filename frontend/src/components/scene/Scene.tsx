@@ -15,8 +15,13 @@ interface Props {
 export function Scene({ params, foldness, color, roughness, metalness }: Props) {
   // Never remount the Canvas — it blanks the view while the WebGL context and
   // scene rebuild. Instead of moving the camera per preset, the model group
-  // is scale-normalized to a 16-unit sheet and the camera stays fixed.
+  // is scale-normalized to a consistent on-screen size and the camera stays
+  // fixed. The flat sheet's outer apothem grows by `pleatRatio` per ring
+  // from the hub's fixed apothem of 1 (see generator.py's HUB_APOTHEM); its
+  // circumradius (the true farthest extent) divides that by cos(pi/sides).
   const cameraDistance = 34;
+  const outerApothem = 1 + params.rings * params.pleatRatio;
+  const outerRadius = outerApothem / Math.cos(Math.PI / params.sides);
 
   return (
     // Camera via the Canvas prop (not drei's <PerspectiveCamera makeDefault>):
@@ -38,7 +43,7 @@ export function Scene({ params, foldness, color, roughness, metalness }: Props) 
       <directionalLight position={[-6, 4, 3]} intensity={0.5} />
       <ambientLight intensity={0.4} />
       <FoldAnimator />
-      <group scale={16 / params.gridDivisions}>
+      <group scale={8 / outerRadius}>
         <FlasherModel
           params={params}
           foldness={foldness}

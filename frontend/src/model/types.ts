@@ -25,7 +25,9 @@ export interface Edge {
 
 export interface Face {
   id: number;
-  vertexIds: number[]; // ordered, CCW in the flat pattern; triangles only for now
+  vertexIds: number[]; // ordered, CCW in the flat pattern; triangles, except
+  // face 0 (the hub), which is the convex regular n-gon — see FlasherMesh's
+  // fan triangulation
   edgeIds: number[]; // edges bounding this face, same winding order as vertexIds
   ringIndex: number; // which concentric ring this face belongs to (0 = central polygon)
 }
@@ -47,13 +49,15 @@ export interface CreasePattern {
   sides: number; // n
 }
 
-// Square-flasher parameters. The sheet is always a square, gridDivisions×
-// gridDivisions unit cells around a single central hub cell (gridDivisions
-// must be odd). Body of POST /api/flasher/geometry.
+// Hexagon/octagon-flasher parameters: a regular `sides`-gon hub surrounded
+// by `rings` concentric rings of trapezoidal panels, each ring twisted by a
+// fixed angle relative to the ring inside it. Body of POST
+// /api/flasher/geometry.
 export interface FlasherParams {
-  gridDivisions: number; // N, odd; Shafer's Big Bang uses 31
-  layerGapRatio: number; // spacing of the wrapped layers, grid units per ring
-  heightRatio: number; // stowed height gained per ring of flat material
+  sides: number; // n, even (6 = hexagon, 8 = octagon)
+  rings: number; // m, concentric pleat ring count
+  pleatRatio: number; // ring radial width, as a fraction of the hub apothem
+  twistRatio: number; // twist angle per ring, as a fraction of pi/sides
 }
 
 export interface FlasherPreset extends FlasherParams {

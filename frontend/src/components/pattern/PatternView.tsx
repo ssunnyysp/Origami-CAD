@@ -28,9 +28,19 @@ export function PatternView({ params }: { params: FlasherParams }) {
     }));
   }, [geometry]);
 
-  if (!lines) return null;
+  // Sized from the pattern's own vertex bounds rather than a structural
+  // param — robust to any hub shape/ring count without knowing its extent
+  // in advance.
+  const half = useMemo(() => {
+    if (!geometry) return 1;
+    const reach = geometry.pattern.vertices.reduce(
+      (m, v) => Math.max(m, Math.abs(v.position.x), Math.abs(v.position.y)),
+      0,
+    );
+    return reach + 0.6;
+  }, [geometry]);
 
-  const half = params.gridDivisions / 2 + 0.6;
+  if (!lines) return null;
 
   return (
     <div className="pattern-view">

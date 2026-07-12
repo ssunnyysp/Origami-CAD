@@ -10,31 +10,34 @@ from .flasher.generator import CreasePattern, FlasherParams
 
 
 class GeometryRequest(BaseModel):
-    """Square-flasher parameters as the UI holds them.
+    """Hexagon/octagon-flasher parameters as the UI holds them.
 
     Frozen so identical requests hash equal — the geometry endpoint caches on
     the whole request object."""
 
     model_config = {"frozen": True}
 
-    gridDivisions: int = Field(ge=7, le=41)
-    layerGapRatio: float = Field(default=0.08, gt=0, le=0.5)
-    heightRatio: float = Field(default=0.25, ge=0, le=1)
+    sides: int = Field(ge=4, le=12)  # hub/ring polygon side count
+    rings: int = Field(ge=1, le=6)  # concentric pleat ring count — the
+    # solver's residual strain grows with ring count (see solver.py's module
+    # docstring), so this is capped well below where it was measured to
+    # degrade rather than left open to any value.
+    pleatRatio: float = Field(default=0.45, gt=0, le=1.0)
+    twistRatio: float = Field(default=0.55, gt=0, lt=1.0)
 
-    @field_validator("gridDivisions")
+    @field_validator("sides")
     @classmethod
-    def _odd_grid(cls, v: int) -> int:
-        if v % 2 != 1:
-            raise ValueError(
-                "gridDivisions must be odd, so the sheet has a single, well-centered hub cell"
-            )
+    def _even_sides(cls, v: int) -> int:
+        if v % 2 != 0:
+            raise ValueError("sides must be even, so the hub is a hexagon/octagon/etc.")
         return v
 
     def to_params(self) -> FlasherParams:
         return FlasherParams(
-            grid_divisions=self.gridDivisions,
-            layer_gap_ratio=self.layerGapRatio,
-            height_ratio=self.heightRatio,
+            sides=self.sides,
+            rings=self.rings,
+            pleat_ratio=self.pleatRatio,
+            twist_ratio=self.twistRatio,
         )
 
 

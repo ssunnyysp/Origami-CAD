@@ -12,16 +12,17 @@ export function AppLayout() {
   const paperColor = useAppStore((s) => s.paperColor);
   const roughness = useAppStore((s) => s.roughness);
   const metalness = useAppStore((s) => s.metalness);
-  const gridDivisions = useAppStore((s) => s.gridDivisions);
-  const layerGapRatio = useAppStore((s) => s.layerGapRatio);
-  const heightRatio = useAppStore((s) => s.heightRatio);
+  const sides = useAppStore((s) => s.sides);
+  const rings = useAppStore((s) => s.rings);
+  const pleatRatio = useAppStore((s) => s.pleatRatio);
+  const twistRatio = useAppStore((s) => s.twistRatio);
   const [paneOpen, setPaneOpen] = useState(true);
 
   useEffect(() => {
     loadPresets().catch((err) => console.error("preset load failed:", err));
   }, [loadPresets]);
 
-  const params = { gridDivisions, layerGapRatio, heightRatio };
+  const params = { sides, rings, pleatRatio, twistRatio };
 
   return (
     <div className="app-layout">
