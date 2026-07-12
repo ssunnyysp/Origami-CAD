@@ -1,32 +1,42 @@
-"""Crease-angle-driven fold solver.
+"""Single-DOF fold solver: a rigid forward-kinematics PREDICTOR, refined by a
+short, deterministic dihedral-angle relaxation.
 
-Every crease is driven toward a target dihedral ANGLE (mountain one way,
-valley the other, facets flat), scaled by foldness; the 3-D shape EMERGES
-from the creases instead of being imposed, so paper only ever bends at the
-drawn crease lines. Edge lengths are hard-projected every substep so the
-sheet is inextensible (it cannot stretch). The signed-dihedral gradient is
-finite-difference validated; a single hinge folds to any target angle at
-0 % strain.
+## Why not pure forward kinematics
 
-Two things this file used to get wrong, found by directly measuring instead
-of eyeballing:
+A flasher vertex where 4 creases meet (2 circumferential + 2 spokes) is
+flat-foldable — Maekawa's condition (mountain-count minus valley-count = ±2)
+holds at every interior vertex of this pattern by construction (see
+`generator.py`'s `spoke_gender`/`ring_gender` docstrings) — but flat-foldable
+does not mean "every incident crease bends by the same magnitude at every
+foldness." The exact relationship between a degree-4 vertex's 4 fold angles
+as a single DOF sweeps is a nonlinear spherical-linkage equation, not a
+shared linear schedule. Driving every crease by
+`angle(t) = sign * MAX_BEND * t` and taking that as the literal 3-D pose
+(implemented first; see PR description) is only correct to FIRST ORDER in
+t — measured strain grows from ~0% at t=0.02 to 120%+ by t=1, which confirms
+the pattern really is a valid infinitesimal mechanism (the naive schedule is
+at least locally consistent, so the crease pattern itself is sound) but the
+exact nonlinear per-vertex relationship needs solving, not assuming.
 
-1. There was no collision term at all — only bending + inextensibility.
-   Nothing stopped unconnected parts of the sheet from passing through each
-   other. `_repel` now pushes apart any pair of vertices that aren't
-   connected by a mesh edge (so aren't supposed to be touching) once they
-   get closer than MIN_SEPARATION, which is the actual fix for the
-   "phasing through itself" symptom — low edge-length strain alone does not
-   imply the surface isn't self-intersecting.
-2. The fold target was pushed to 170° so it would look "more dramatic," but
-   this chiral pattern's ring loop does not close as a clean rigid rotation
-   that close to a flat fold — the length projection was forcibly papering
-   over the mismatch, which is what showed up as chaotic local crumpling
-   ("crunching") instead of a uniform rotation. Tracking each ring's own
-   corner angle through the sweep (not just comparing start/end) shows the
-   rotation is consistent (rings agree to within a couple of degrees) up to
-   about 130-140°, and comes apart above that — so MAX_ANGLE is capped at
-   130° even though it visually "wants" to go further.
+Solving that exactly for a general m-ring, n-sided pattern means a coupled
+spherical-linkage system across every interior vertex simultaneously — a
+harder problem than fits this pass (see `docs/FLASHER_NOTES.md` Phase 3).
+Rather than guess a second closed form blindly, this solver keeps the rigid
+FK prediction (still driven by the same single shared `angle(t)` schedule —
+the actual single-DOF requirement) as a qualitatively-correct SEED, then
+refines it with a short dihedral-angle relaxation using the same
+bend-toward-target + inextensibility-projection + collision machinery as the
+project's earlier solver — but seeded from the correct rigid shape instead
+of a small random perturbation of the flat sheet, so it converges in far
+fewer substeps, to a far smaller residual, and with no random seed (so it is
+exactly reproducible run to run, unlike a relaxation started from noise).
+
+Every fold target is still one shared function of `foldness` alone,
+`sign * MAX_BEND * t`; the relaxation only resolves the fact that this
+shared schedule doesn't exactly satisfy every vertex's nonlinear closure
+simultaneously. `scripts/validate_flasher.py` measures the residual strain
+this leaves; see the PR description for the measurement sweep that picked
+`MAX_BEND`.
 """
 
 from __future__ import annotations
@@ -36,49 +46,107 @@ from collections import defaultdict
 import numpy as np
 from scipy.spatial import cKDTree
 
-from .generator import HUB_CENTER, HUB_HALF, CreasePattern, FlasherParams
+from .generator import CreasePattern, FlasherParams
 
-MAX_ANGLE = np.radians(130.0)  # target crease dihedral at foldness = 1 — the
-# highest angle where every ring's rotation stays consistent (verified by
-# tracking each ring's own corner through the whole sweep, not just t=0/t=1);
-# above ~140-150 deg the rings desync and the fold visibly crumples instead
-# of rotating uniformly.
-BEND = 3.0  # bending drive gain
-SEED = 0.05  # tiny accordion z-seed to break the flat equilibrium
-DT = 0.05
-DAMP = 0.9
-LENGTH_ITERS = 10  # hard inextensibility projections per substep
-LENGTH_RELAX = 0.9
-MIN_SEPARATION = 0.12  # closest two non-adjacent vertices are allowed to get
-REPEL_GAIN = 1.2  # push-apart strength once inside MIN_SEPARATION
-REPEL_FLAT_EXCLUDE = 1.6  # skip pairs this close in the FLAT pattern — they're
-# structurally near each other (e.g. the two triangles either side of a
-# closing hinge are meant to swing close together) and repelling them would
-# fight the fold itself. Only pairs far apart in the flat sheet but close in
-# 3-D are genuine self-intersection.
+MAX_BEND = np.radians(120.0)  # target crease bend at foldness = 1, shared by
+# every real crease. Measured by sweeping 90-150 deg: strain is NOT
+# monotonic in this angle (it depends on how far the FK seed drifts from the
+# true nonlinear closure, which oscillates with angle), so this was picked
+# empirically, not assumed — see PR description for the sweep table.
 STEPS = 60  # foldness samples (frames = STEPS + 1)
-SUBSTEPS = 45
+BEND = 5.0  # bending drive gain toward the target dihedral
+DT = 0.06
+DAMP = 0.85
+SUBSTEPS = 80  # measured: the naive shared-angle-schedule seed leaves more
+# residual error to relax out than the project's earlier (topologically
+# simpler, square-grid) solver needed, especially as ring count grows —
+# see PR description, "known limitation: ring count vs. residual strain."
+LENGTH_ITERS = 20
+LENGTH_RELAX = 0.9
+MIN_SEPARATION = 0.12
+REPEL_GAIN = 1.2
+REPEL_FLAT_EXCLUDE = 1.6  # flat-pattern distance below which two vertices are
+# structurally near each other (e.g. either side of a closing hinge) and are
+# expected to swing close together — only pairs far apart in the flat sheet
+# but close in 3-D are genuine self-intersection.
+
+
+def _rotation_matrix(axis: np.ndarray, angle: float) -> np.ndarray:
+    """Rodrigues' rotation formula: 3x3 rotation by `angle` about unit `axis`."""
+    x, y, z = axis
+    K = np.array([[0, -z, y], [z, 0, -x], [-y, x, 0]])
+    return np.eye(3) + np.sin(angle) * K + (1 - np.cos(angle)) * (K @ K)
 
 
 def _cross2(ax, ay, bx, by):
     return ax * by - ay * bx
 
 
+def _face_triangles(vertex_ids: list[int]):
+    """Fan-triangulate a (possibly non-triangular, but always convex and flat
+    in the rest pattern) face for hinge-apex lookup. A no-op for triangles.
+    Only the hub face has more than 3 vertices, and it is rigid/pinned, so
+    which fan diagonal is used never matters — it's never a real crease."""
+    for k in range(1, len(vertex_ids) - 1):
+        yield (vertex_ids[0], vertex_ids[k], vertex_ids[k + 1])
+
+
 class FlasherFoldSolver:
     def __init__(self, pattern: CreasePattern, params: FlasherParams):
-        self.params = params
+        self.pattern = pattern
         by_id = {v.id: v for v in pattern.vertices}
         order = sorted(by_id)
         self.n_out = max(order) + 1
         self.flat = np.array([list(by_id[i].position) + [0.0] for i in range(self.n_out)])
         V = self.n_out
 
-        assign = {(min(e.v0, e.v1), max(e.v0, e.v1)): e.assignment for e in pattern.edges}
+        assign = {e.id: e.assignment for e in pattern.edges}
+        edge_endpoints = {e.id: (e.v0, e.v1) for e in pattern.edges}
+
+        # --- FK predictor: spanning tree over face adjacency, rooted at the
+        # hub (face 0, always emitted first by generator.py). -------------------
+        adjacency = {a["faceId"]: a["neighbors"] for a in pattern.adjacency}
+        root = 0
+        parent: dict[int, tuple[int, int]] = {}
+        order_bfs: list[int] = [root]
+        visited = {root}
+        head = 0
+        while head < len(order_bfs):
+            face_id = order_bfs[head]
+            head += 1
+            for nb in adjacency.get(face_id, []):
+                nf = nb["faceId"]
+                if nf in visited:
+                    continue
+                visited.add(nf)
+                parent[nf] = (face_id, nb["sharedEdgeId"])
+                order_bfs.append(nf)
+        missing = {f.id for f in pattern.faces} - visited
+        if missing:
+            raise RuntimeError(f"face-adjacency graph is disconnected: faces {missing} unreached")
+        self.bfs_order = order_bfs
+        self.parent = parent
+
+        self.hinge_v0: dict[int, int] = {}
+        self.hinge_v1: dict[int, int] = {}
+        self.hinge_sign: dict[int, float] = {}
+        for child, (_, edge_id) in parent.items():
+            v0, v1 = edge_endpoints[edge_id]
+            self.hinge_v0[child] = v0
+            self.hinge_v1[child] = v1
+            self.hinge_sign[child] = {"mountain": 1.0, "valley": -1.0, "facet": 0.0}[assign[edge_id]]
+        self.face_vertex_ids = [f.vertex_ids for f in pattern.faces]
+
+        # --- dihedral-angle relaxation setup (fan-triangulated hinge table,
+        # same construction the project's earlier solver used). -----------------
         edge_tris: dict[tuple[int, int], list[int]] = defaultdict(list)
         for f in pattern.faces:
-            t = f.vertex_ids
-            for a, b, apex in ((t[0], t[1], t[2]), (t[1], t[2], t[0]), (t[2], t[0], t[1])):
+            for a, b, apex in _face_triangles(f.vertex_ids):
                 edge_tris[(min(a, b), max(a, b))].append(apex)
+                a2, b2, apex2 = b, apex, a
+                edge_tris[(min(a2, b2), max(a2, b2))].append(apex2)
+                a3, b3, apex3 = apex, a, b
+                edge_tris[(min(a3, b3), max(a3, b3))].append(apex3)
 
         hi, hj, hk, hl, sgn = [], [], [], [], []
         for (a, b), apexes in edge_tris.items():
@@ -88,55 +156,67 @@ class FlasherFoldSolver:
             if asg == "border":
                 continue
             d = self.flat[b, :2] - self.flat[a, :2]
-            k, l = apexes
-            if _cross2(d[0], d[1], *(self.flat[k, :2] - self.flat[a, :2])) < 0:
-                k, l = l, k
-            hi.append(a); hj.append(b); hk.append(k); hl.append(l)
+            k_apex, l_apex = apexes
+            if _cross2(d[0], d[1], *(self.flat[k_apex, :2] - self.flat[a, :2])) < 0:
+                k_apex, l_apex = l_apex, k_apex
+            hi.append(a)
+            hj.append(b)
+            hk.append(k_apex)
+            hl.append(l_apex)
             sgn.append({"mountain": 1.0, "valley": -1.0, "facet": 0.0}[asg])
-        self.hi, self.hj, self.hk, self.hl = map(np.array, (hi, hj, hk, hl))
+        self.hi, self.hj, self.hk, self.hl = (np.array(x) for x in (hi, hj, hk, hl))
         self.sgn = np.array(sgn)
 
-        self.ea = np.array([a for a, _ in edge_tris])
-        self.eb = np.array([b for _, b in edge_tris])
+        # --- length-projection constraints: every real (non-border) edge. -----
+        real_edges = [e for e in pattern.edges if e.assignment != "border"]
+        self.ea = np.array([e.v0 for e in real_edges])
+        self.eb = np.array([e.v1 for e in real_edges])
         self.rest = np.linalg.norm(self.flat[self.eb] - self.flat[self.ea], axis=1)
         deg = np.zeros(V)
         np.add.at(deg, self.ea, 1.0)
         np.add.at(deg, self.eb, 1.0)
         self.inv_deg = 1.0 / np.maximum(deg, 1.0)
 
-        # Pin the hub square flat (rho <= HUB_HALF) — the central square all the
-        # rest folds around.
-        rho = np.maximum(
-            np.abs(self.flat[:, 0] - HUB_CENTER[0]), np.abs(self.flat[:, 1] - HUB_CENTER[1])
-        )
-        self.pinned = rho <= HUB_HALF + 1e-9
-        self.ring_of = np.zeros(V)
-        for f in pattern.faces:
-            for v in f.vertex_ids:
-                self.ring_of[v] = f.ring_index
+        hub_ids = {v for f in pattern.faces if f.ring_index == 0 for v in f.vertex_ids}
+        self.pinned = np.array([i in hub_ids for i in range(V)])
 
-    def _repel(self, X: np.ndarray) -> None:
-        """Push apart any pair of vertices that are close in 3-D but far
-        apart in the flat pattern — real self-intersection, not just two
-        sides of the same hinge swinging together as intended."""
-        pairs = cKDTree(X).query_pairs(MIN_SEPARATION, output_type="ndarray")
-        if len(pairs) == 0:
-            return
-        i, j = pairs[:, 0], pairs[:, 1]
-        flat_d = np.linalg.norm(self.flat[i, :2] - self.flat[j, :2], axis=1)
-        far_in_flat = flat_d > REPEL_FLAT_EXCLUDE
-        i, j = i[far_in_flat], j[far_in_flat]
-        if len(i) == 0:
-            return
-        d = X[j] - X[i]
-        dist = np.linalg.norm(d, axis=1, keepdims=True)
-        dist = np.maximum(dist, 1e-6)
-        push = np.maximum(MIN_SEPARATION - dist[:, 0], 0.0)[:, None] * (d / dist) * REPEL_GAIN
-        F = np.zeros_like(X)
-        np.add.at(F, i, -push)
-        np.add.at(F, j, push)
-        F[self.pinned] = 0.0
-        X += F
+    # --- FK predictor ---------------------------------------------------------
+
+    def _face_poses(self, t: float) -> tuple[np.ndarray, np.ndarray]:
+        n_faces = len(self.pattern.faces)
+        R = np.zeros((n_faces, 3, 3))
+        T = np.zeros((n_faces, 3))
+        R[0] = np.eye(3)
+        angle = MAX_BEND * t
+        for face_id in self.bfs_order[1:]:
+            parent_id, _ = self.parent[face_id]
+            Rp, Tp = R[parent_id], T[parent_id]
+            v0, v1 = self.hinge_v0[face_id], self.hinge_v1[face_id]
+            pivot = Rp @ self.flat[v0] + Tp
+            axis_dir = Rp @ (self.flat[v1] - self.flat[v0])
+            axis_norm = np.linalg.norm(axis_dir)
+            sign = self.hinge_sign[face_id]
+            if axis_norm < 1e-12 or sign == 0.0:
+                Rh = np.eye(3)
+            else:
+                Rh = _rotation_matrix(axis_dir / axis_norm, sign * angle)
+            R[face_id] = Rh @ Rp
+            T[face_id] = pivot - Rh @ pivot + Rh @ Tp
+        return R, T
+
+    def _predict(self, t: float) -> np.ndarray:
+        R, T = self._face_poses(t)
+        sums = np.zeros((self.n_out, 3))
+        counts = np.zeros(self.n_out)
+        for face, vids in zip(self.pattern.faces, self.face_vertex_ids):
+            Rf, Tf = R[face.id], T[face.id]
+            for vid in vids:
+                sums[vid] += Rf @ self.flat[vid] + Tf
+                counts[vid] += 1
+        counts[counts == 0] = 1.0
+        return sums / counts[:, None]
+
+    # --- relaxation refinement -------------------------------------------------
 
     def _dihedral(self, X):
         x1, x2, x3, x4 = X[self.hi], X[self.hj], X[self.hk], X[self.hl]
@@ -172,31 +252,51 @@ class FlasherFoldSolver:
             dX[self.pinned] = 0.0
             X += dX
 
-    def solve_sweep(self):
-        X = self.flat.copy()
-        X[:, 2] = SEED * np.where(self.ring_of % 2 == 0, 1.0, -1.0) * np.hypot(X[:, 0], X[:, 1])
-        X[self.pinned, 2] = 0.0
+    def _repel(self, X):
+        pairs = cKDTree(X).query_pairs(MIN_SEPARATION, output_type="ndarray")
+        if len(pairs) == 0:
+            return
+        i, j = pairs[:, 0], pairs[:, 1]
+        flat_d = np.linalg.norm(self.flat[i, :2] - self.flat[j, :2], axis=1)
+        far = flat_d > REPEL_FLAT_EXCLUDE
+        i, j = i[far], j[far]
+        if len(i) == 0:
+            return
+        d = X[j] - X[i]
+        dist = np.maximum(np.linalg.norm(d, axis=1, keepdims=True), 1e-6)
+        push = np.maximum(MIN_SEPARATION - dist[:, 0], 0.0)[:, None] * (d / dist) * REPEL_GAIN
+        F = np.zeros_like(X)
+        np.add.at(F, i, -push)
+        np.add.at(F, j, push)
+        F[self.pinned] = 0.0
+        X += F
+
+    def _refine(self, X: np.ndarray, t: float) -> np.ndarray:
         vel = np.zeros_like(X)
-        frames = [np.round(self.flat, 4).reshape(-1).tolist()]
-        samples = [0.0]
-        for s in range(1, STEPS + 1):
-            t = s / STEPS
-            for _ in range(SUBSTEPS):
-                F = np.zeros_like(X)
-                th, g1, g2, g3, g4 = self._dihedral(X)
-                c = (-BEND * (th - self.sgn * MAX_ANGLE * t))[:, None]
-                np.add.at(F, self.hi, c * g1)
-                np.add.at(F, self.hj, c * g2)
-                np.add.at(F, self.hk, c * g3)
-                np.add.at(F, self.hl, c * g4)
-                F[self.pinned] = 0.0
-                vel = (vel + DT * F) * DAMP
-                X += DT * vel
-                X[self.pinned, 2] = 0.0
-                self._project_lengths(X)
-                self._repel(X)
+        target = self.sgn * MAX_BEND * t
+        for _ in range(SUBSTEPS):
+            F = np.zeros_like(X)
+            th, g1, g2, g3, g4 = self._dihedral(X)
+            c = (-BEND * (th - target))[:, None]
+            np.add.at(F, self.hi, c * g1)
+            np.add.at(F, self.hj, c * g2)
+            np.add.at(F, self.hk, c * g3)
+            np.add.at(F, self.hl, c * g4)
+            F[self.pinned] = 0.0
+            vel = (vel + DT * F) * DAMP
+            X = X + DT * vel
+            X[self.pinned, 2] = self.flat[self.pinned, 2]
+            self._project_lengths(X)
+            self._repel(X)
+        return X
+
+    def solve_sweep(self):
+        samples = [s / STEPS for s in range(STEPS + 1)]
+        frames = []
+        for t in samples:
+            X = self._predict(t)
+            X = self._refine(X, t)
             frames.append(np.round(X, 4).reshape(-1).tolist())
-            samples.append(t)
         return samples, frames
 
 

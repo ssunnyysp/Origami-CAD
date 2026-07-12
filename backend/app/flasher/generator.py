@@ -1,33 +1,60 @@
-"""Square flasher crease-pattern generator (Shafer / Zirbel & Lang style, as
-in the ORI*botics "natural folding" diagram and Shafer's "Flasher Big Bang").
+"""Hexagon/octagon flasher crease-pattern generator — a true "twist fold":
+a regular n-gon hub surrounded by m concentric rings, each ring rotated
+("twisted") by a fixed angle relative to the ring inside it. This is the
+standard construction behind real flashers (Shafer, Lang's "twist" family,
+the Guest & Pellegrino wrapping-fold): a central polygon, plus rings of
+congruent trapezoidal panels, plus radial "spoke" creases that let each ring
+rotate relative to its neighbor.
 
-A square sheet on an N×N unit-cell grid where N (`grid_divisions`) is ODD.
-Odd N is what gives the sheet a single, well-defined CENTRAL CELL — the hub
-everything folds around: with N cells indexed 0..N-1, the middle index
-h = (N-1)/2 is only an integer when N is odd. An even N splits the center
-between four cells with no true middle, which is exactly the bug an even
-grid had here before.
+## Geometry
 
-Structure, all centered on the hub cell (whose own center sits at the
-sheet's true geometric origin (0, 0) in the output coordinates):
+n = `sides` (hub/ring side count, must be even — 6 or 8 for a hexagon or
+octagon hub). m = `rings` (pleat ring count).
 
-- The hub cell itself stays flat and rigid — the "polygon" of "natural
-  folding: rotation of a polygon on a sheet". Its boundary is the first
-  mountain crease.
-- Two full corner-to-corner diagonals, passing exactly through the hub's
-  center, continue outward from its corners — the reverse folds that carry
-  each ring around a hub corner.
-- Ring pleats run PARALLEL to each edge at every grid line beyond the hub,
-  forming simple concentric squares (not spokes), alternating mountain and
-  valley outward.
-- Folding is "natural folding": the hub stays flat, colored side up, while
-  the sheet accordions vertically between the valley rings (hub-plane
-  troughs) and mountain rings (wall ridges) as it coils around the hub,
-  collapsing into a compact block one band tall centered on the hub.
+Ring k's n corners sit on a circle of radius R_k, at angles offset by a fixed
+twist φ from ring (k-1)'s corners:
 
-Every cell is split into 4 triangles by an X through its center so the mesh
-can flex; only X halves lying on the two diagonals are real creases, the
-rest are "facet" edges (never drawn).
+    C[k][i] = R_k * (cos(θ_i + k·φ), sin(θ_i + k·φ)),   θ_i = 2π·i/n
+
+R_k grows linearly with the ring's *apothem* (so pleat rings have constant
+radial width w = `pleat_ratio` · hub apothem): R_k = (a0 + k·w) / cos(π/n).
+
+Every ring's corners are the SAME polygon, just scaled up and rotated by kφ —
+so ring k is congruent to ring 0 (up to scale), and every one of its n
+panels is congruent to the others by n-fold rotational symmetry. φ is the
+"twisted at a consistent angle ring-to-ring" the whole model turns on: φ = 0
+reproduces mirror-symmetric nested polygons (which can only dome, never
+twist — no rotational handedness); any φ ≠ 0 makes the pattern chiral, which
+is what lets every ring rotate the SAME way simultaneously when folded (the
+actual flasher wrap motion).
+
+## Panels
+
+Between ring k-1 and ring k, side i is the quadrilateral
+
+    C[k-1][i], C[k-1][i+1], C[k][i+1], C[k][i]
+
+Its two "circumferential" sides (C[k-1][i]-C[k-1][i+1] and C[k][i]-C[k][i+1])
+are congruent copies of the same polygon edge at different radii; its two
+"spoke" sides (C[k-1][i]-C[k][i] and C[k-1][i+1]-C[k][i+1]) are the radial
+creases that let ring k hinge relative to ring k-1. Because a quadrilateral
+with skewed (non-parallel) legs isn't guaranteed planar once its 4 corners
+move independently, each panel is split by its own short diagonal into 2
+triangles for meshing/solving — this diagonal is a facet edge (never a real
+crease, always flat), and it is entirely internal to one panel, so it never
+rigidly welds one panel to its neighbor the way an earlier (discarded)
+version of this generator did by threading facet edges *between* panels.
+
+## Crease assignment
+
+- Circumferential creases alternate mountain/valley ring-to-ring:
+  `ring_gender(k)` — the hub's own boundary (k=0) is always "mountain"; the
+  outermost ring boundary (k=m) has no panel beyond it, so it is the sheet's
+  physical edge ("border"), not a fold.
+- Spoke creases alternate mountain/valley AROUND each ring (by corner index
+  i), so a single ring's n radial creases are not all the same sense —
+  consistent with a real flasher CP, where consecutive spokes fold opposite
+  ways to let the ring gather into a stack rather than cone outward.
 """
 
 from __future__ import annotations
@@ -35,27 +62,40 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass, field
 
-# The hub is a single unit cell; in output coordinates (which are shifted so
-# the hub's own center is the origin) its half-width is always 0.5,
-# regardless of grid_divisions.
 HUB_CENTER = (0.0, 0.0)
-HUB_HALF = 0.5
+HUB_APOTHEM = 1.0  # fixed hub half-width (apothem); everything else scales off this
 
 
 def ring_gender(k: int) -> str:
-    """Mountain/valley of ring k's own boundary crease (k=1 touches the hub,
-    alternating outward). solver.py folds each crease by the angle read
-    straight off this pattern's edge assignments, so the fold can never
-    silently drift from the drawn pattern.
-    """
+    """Mountain/valley of ring k's own circumferential boundary crease.
+    k=0 is the hub's own boundary (always mountain — the wrap's first
+    fold), alternating outward from there."""
+    if k == 0:
+        return "mountain"
     return "mountain" if k % 2 == 1 else "valley"
+
+
+def _opposite(gender: str) -> str:
+    return "valley" if gender == "mountain" else "mountain"
+
+
+def spoke_gender(k: int, i: int) -> str:
+    """Mountain/valley of the radial spoke crease between ring k-1's corner i
+    and ring k's corner i. Alternates by corner index i around the ring (not
+    just ring-to-ring like the circumferential creases) — every other spoke
+    in a ring folds the opposite way, which is what lets the ring gather
+    into a flat stack instead of coning outward when the circumferential
+    creases pull it closed."""
+    base = _opposite(ring_gender(k))
+    return base if i % 2 == 0 else _opposite(base)
 
 
 @dataclass(frozen=True)
 class FlasherParams:
-    grid_divisions: int  # N; the sheet is N×N unit cells, N odd (single center cell)
-    layer_gap_ratio: float  # wall-to-wall spacing of the wrapped layers, grid units per ring
-    height_ratio: float  # stowed height gained per ring of flat material, grid units
+    sides: int  # n; hub/ring polygon side count, must be even (6 or 8)
+    rings: int  # m; number of concentric pleat rings, >= 1
+    pleat_ratio: float  # ring radial width, as a fraction of the hub apothem
+    twist_ratio: float  # twist angle per ring, as a fraction of pi/sides (0,1)
 
 
 @dataclass
@@ -77,7 +117,7 @@ class Face:
     id: int
     vertex_ids: list[int]  # ordered CCW in the flat pattern
     edge_ids: list[int]  # same winding order
-    ring_index: int  # taxicab ring about the hub (0 = hub)
+    ring_index: int  # 0 = hub, k = the panel ring between ring k-1 and ring k
 
 
 @dataclass
@@ -87,112 +127,50 @@ class CreasePattern:
     faces: list[Face]
     adjacency: list[dict] = field(default_factory=list)
     ring_count: int = 0
-    sides: int = 4  # always square paper
+    sides: int = 6
+
+
+def _signed_area(pts: list[tuple[float, float]]) -> float:
+    total = 0.0
+    for a, b in zip(pts, pts[1:] + pts[:1]):
+        total += a[0] * b[1] - b[0] * a[1]
+    return 0.5 * total
 
 
 def generate_flasher(params: FlasherParams) -> CreasePattern:
-    n = params.grid_divisions
-    if n % 2 != 1:
-        raise ValueError(
-            "grid_divisions must be odd, so the sheet has a single, well-centered "
-            "hub cell (an even count splits the center between four cells)"
-        )
-    h = (n - 1) // 2  # index of the hub cell (both x and y)
-    m = h  # number of pleat rings between the hub and the sheet edge
-    center = n / 2.0  # sheet's true center, in 0..n index coordinates
+    n = params.sides
+    m = params.rings
+    if n % 2 != 0 or n < 4:
+        raise ValueError("sides must be even and >= 4 (a hexagon=6 or octagon=8 hub)")
+    if m < 1:
+        raise ValueError("rings must be >= 1")
+    if not (0.0 < params.twist_ratio < 1.0):
+        raise ValueError("twist_ratio must be in (0, 1) — 0 gives a non-chiral pattern")
 
-    # Ring k's square boundary spans index range [low(k), high(k)]; k=0 is
-    # the hub cell's own boundary, k=1..m are the pleat rings outward.
-    def low(k: int) -> int:
-        return h - k
+    half_angle = math.pi / n
+    phi = params.twist_ratio * half_angle  # twist per ring
+    w = params.pleat_ratio * HUB_APOTHEM  # radial pleat width
 
-    def high(k: int) -> int:
-        return h + 1 + k
+    def radius(k: int) -> float:
+        apothem = HUB_APOTHEM + k * w
+        return apothem / math.cos(half_angle)
 
-    # --- crease assignments ------------------------------------------------
-    # Grid-line creases, keyed by sorted unit-segment endpoints (in 0..n
-    # index coordinates).
-    seg_assignment: dict[tuple[tuple[int, int], tuple[int, int]], str] = {}
+    def corner(k: int, i: int) -> tuple[float, float]:
+        r = radius(k)
+        theta = 2.0 * math.pi * i / n + k * phi
+        return (r * math.cos(theta), r * math.sin(theta))
 
-    def set_seg(p: tuple[int, int], q: tuple[int, int], assignment: str) -> None:
-        key = (p, q) if p <= q else (q, p)
-        seg_assignment.setdefault(key, assignment)
+    def vid(k: int, i: int) -> int:
+        return k * n + (i % n)
 
-    # Hub boundary (ring 0): the first mountain — the wall of the wrap begins
-    # here.
-    lo, hi = low(0), high(0)
-    hub = [(lo, lo), (hi, lo), (hi, hi), (lo, hi)]
-    for i in range(4):
-        set_seg(hub[i], hub[(i + 1) % 4], "mountain")
-
-    # Ring pleats k=1..m: each ring's 4 sides are trimmed one unit short at a
-    # consistently-rotated (CCW) corner and rejoined there by a diagonal cut
-    # (below). That single consistent trim/cut is what gives the pattern a
-    # CHIRALITY — a fixed handedness — instead of the mirror-symmetric plain
-    # square rings this generator used to draw. A mirror-symmetric pattern
-    # has no preferred turning direction, so folding it only domes; a chiral
-    # one lets every ring rotate the SAME way around the hub simultaneously,
-    # the real flasher twist motion.
-    for k in range(1, m + 1):
-        lo, hi = low(k), high(k)
-        gender = ring_gender(k)
-        for x in range(lo, hi - 1):
-            set_seg((x, hi), (x + 1, hi), gender)  # top, trimmed at right (NE) end
-        for y in range(lo + 1, hi):
-            set_seg((hi, y), (hi, y + 1), gender)  # right, trimmed at bottom (SE) end
-        for x in range(lo + 1, hi):
-            set_seg((x, lo), (x + 1, lo), gender)  # bottom, trimmed at left (SW) end
-        for y in range(lo, hi - 1):
-            set_seg((lo, y), (lo, y + 1), gender)  # left, trimmed at top (NW) end
-
-    # Chiral corner cuts: the unit cell at each trimmed corner is split by ONE
-    # diagonal (not the symmetric X the old generator drew), so it both closes
-    # the gap left by the trim AND turns the boundary — every corner turns the
-    # same rotational way, which is what gives the pattern a fixed handedness.
-    diag_cells: dict[tuple[int, int], tuple[str, str]] = {}  # cell -> (which, gender)
-    for k in range(1, m + 1):
-        lo, hi = low(k), high(k)
-        ring_g = ring_gender(k)
-        # The corner cut is the OPPOSITE gender from the ring's own boundary —
-        # it is a genderless (in Shafer's sense) reverse fold, and using the
-        # opposite sense is what keeps every corner turning the SAME
-        # rotational way. Using the same gender as the boundary (this
-        # generator's earlier bug) makes alternating rings twist in opposite
-        # directions instead of rotating together.
-        diag_g = "valley" if ring_g == "mountain" else "mountain"
-        diag_cells[(hi - 1, hi - 1)] = ("main", diag_g)  # NE gap
-        diag_cells[(hi - 1, lo)] = ("anti", diag_g)  # SE gap
-        diag_cells[(lo, lo)] = ("main", diag_g)  # SW gap
-        diag_cells[(lo, hi - 1)] = ("anti", diag_g)  # NW gap
-
-    def grid_segment_assignment(p: tuple[int, int], q: tuple[int, int]) -> str:
-        (x1, y1), (x2, y2) = p, q
-        if (x1 in (0, n) and x2 in (0, n)) or (y1 in (0, n) and y2 in (0, n)):
-            return "border"
-        key = (p, q) if p <= q else (q, p)
-        return seg_assignment.get(key, "facet")
-
-    # --- mesh --------------------------------------------------------------
-    # Index coordinates run 0..n for the mesh arrays; output positions are
-    # shifted by `center` so the hub cell's own center is the origin.
-    grid_stride = n + 1
-
-    def grid_id(x: int, y: int) -> int:
-        return y * grid_stride + x
-
-    def center_id(cx: int, cy: int) -> int:
-        return grid_stride * grid_stride + cy * n + cx
-
+    # --- vertices ------------------------------------------------------
     vertices: list[Vertex] = []
-    for y in range(n + 1):
-        for x in range(n + 1):
-            vertices.append(Vertex(id=grid_id(x, y), position=(x - center, y - center)))
-    for cy in range(n):
-        for cx in range(n):
-            vertices.append(
-                Vertex(id=center_id(cx, cy), position=(cx + 0.5 - center, cy + 0.5 - center))
-            )
+    for k in range(m + 1):
+        for i in range(n):
+            vertices.append(Vertex(id=vid(k, i), position=corner(k, i)))
+    positions = {v.id: v.position for v in vertices}
 
+    # --- edges -----------------------------------------------------------
     edges: list[Edge] = []
     edge_id_by_key: dict[tuple[int, int], int] = {}
 
@@ -206,54 +184,71 @@ def generate_flasher(params: FlasherParams) -> CreasePattern:
         edges.append(Edge(id=edge_id, v0=a, v1=b, assignment=assignment))
         return edge_id
 
+    def circumferential_assignment(k: int) -> str:
+        if k == m:
+            return "border"
+        return ring_gender(k)
+
+    # --- faces -------------------------------------------------------------
     faces: list[Face] = []
 
-    for cy in range(n):
-        for cx in range(n):
-            v00 = grid_id(cx, cy)
-            v10 = grid_id(cx + 1, cy)
-            v11 = grid_id(cx + 1, cy + 1)
-            v01 = grid_id(cx, cy + 1)
-            vc = center_id(cx, cy)
+    def make_face(vertex_ids: list[int], edge_assignments: list[str], ring_index: int) -> None:
+        pts = [positions[v] for v in vertex_ids]
+        if _signed_area(pts) < 0:
+            length = len(vertex_ids)
+            # Reversed vertex list: rev[j] = orig[-1-j]. Edge j of the
+            # reversed polygon runs rev[j]-rev[j+1] = orig[-1-j]-orig[-2-j],
+            # i.e. the same *segment* as original edge index (length-2-j) —
+            # re-derived directly rather than trusting a slice trick, since
+            # an earlier version of this got the alignment wrong.
+            vertex_ids = vertex_ids[::-1]
+            edge_assignments = [edge_assignments[(length - 2 - j) % length] for j in range(length)]
+        edge_ids = [
+            get_or_create_edge(vertex_ids[j], vertex_ids[(j + 1) % len(vertex_ids)], edge_assignments[j])
+            for j in range(len(vertex_ids))
+        ]
+        faces.append(Face(id=len(faces), vertex_ids=vertex_ids, edge_ids=edge_ids, ring_index=ring_index))
 
-            main_half = cross_half = "facet"
-            diag = diag_cells.get((cx, cy))
-            if diag is not None:
-                which, gender = diag
-                if which == "main":
-                    main_half = gender
-                else:
-                    cross_half = gender
+    # Hub: a single rigid regular n-gon.
+    hub_ids = [vid(0, i) for i in range(n)]
+    hub_edge_assignments = [circumferential_assignment(0) for _ in range(n)]
+    make_face(hub_ids, hub_edge_assignments, ring_index=0)
 
-            e_bottom = get_or_create_edge(
-                v00, v10, grid_segment_assignment((cx, cy), (cx + 1, cy))
-            )
-            e_top = get_or_create_edge(
-                v01, v11, grid_segment_assignment((cx, cy + 1), (cx + 1, cy + 1))
-            )
-            e_left = get_or_create_edge(v00, v01, grid_segment_assignment((cx, cy), (cx, cy + 1)))
-            e_right = get_or_create_edge(
-                v10, v11, grid_segment_assignment((cx + 1, cy), (cx + 1, cy + 1))
-            )
-            e_00c = get_or_create_edge(v00, vc, main_half)
-            e_11c = get_or_create_edge(v11, vc, main_half)
-            e_10c = get_or_create_edge(v10, vc, cross_half)
-            e_01c = get_or_create_edge(v01, vc, cross_half)
+    # Ring panels k=1..m, each split into 2 triangles by its shorter diagonal.
+    for k in range(1, m + 1):
+        for i in range(n):
+            inner_a, inner_b = vid(k - 1, i), vid(k - 1, i + 1)
+            outer_a, outer_b = vid(k, i), vid(k, i + 1)
+            circ_in = circumferential_assignment(k - 1)
+            circ_out = circumferential_assignment(k)
+            spoke_a = spoke_gender(k, i)  # inner_a - outer_a
+            spoke_b = spoke_gender(k, i + 1)  # inner_b - outer_b
 
-            cell_ring = max(abs(cx - h), abs(cy - h))
-            for tri_vertices, tri_edges in (
-                ([v00, v10, vc], [e_bottom, e_10c, e_00c]),
-                ([v10, v11, vc], [e_right, e_11c, e_10c]),
-                ([v11, v01, vc], [e_top, e_01c, e_11c]),
-                ([v01, v00, vc], [e_left, e_00c, e_01c]),
-            ):
-                faces.append(
-                    Face(
-                        id=len(faces),
-                        vertex_ids=tri_vertices,
-                        edge_ids=tri_edges,
-                        ring_index=cell_ring,
-                    )
+            d1 = math.dist(positions[inner_a], positions[outer_b])  # inner_a-outer_b
+            d2 = math.dist(positions[inner_b], positions[outer_a])  # inner_b-outer_a
+            if d1 <= d2:
+                # triangles (inner_a, inner_b, outer_b) and (inner_a, outer_b, outer_a)
+                make_face(
+                    [inner_a, inner_b, outer_b],
+                    [circ_in, spoke_b, "facet"],
+                    ring_index=k,
+                )
+                make_face(
+                    [inner_a, outer_b, outer_a],
+                    ["facet", circ_out, spoke_a],
+                    ring_index=k,
+                )
+            else:
+                # triangles (inner_a, inner_b, outer_a) and (inner_b, outer_b, outer_a)
+                make_face(
+                    [inner_a, inner_b, outer_a],
+                    [circ_in, "facet", spoke_a],
+                    ring_index=k,
+                )
+                make_face(
+                    [inner_b, outer_b, outer_a],
+                    [spoke_b, circ_out, "facet"],
+                    ring_index=k,
                 )
 
     # Face adjacency: any two faces sharing an edge id are neighbors.
@@ -275,5 +270,5 @@ def generate_flasher(params: FlasherParams) -> CreasePattern:
         faces=faces,
         adjacency=adjacency,
         ring_count=m,
-        sides=4,
+        sides=n,
     )
