@@ -7,11 +7,12 @@ export function AnimateToggle() {
   return (
     <label className="control-row">
       <span>Animate</span>
-      <input
-        type="checkbox"
-        checked={animating}
-        onChange={(e) => setAnimating(e.target.checked)}
-      />
+      <span className="switch">
+        <input type="checkbox" checked={animating} onChange={(e) => setAnimating(e.target.checked)} />
+        <span className="switch-track" aria-hidden="true">
+          <span className="switch-thumb" />
+        </span>
+      </span>
       <span className="control-value">{animating ? "folding" : "off"}</span>
     </label>
   );

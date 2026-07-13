@@ -43,6 +43,14 @@ export function AppLayout() {
           />
         )}
         {ready && viewMode === "pattern" && <PatternView geometry={geometry} />}
+        {/* First-load and slow-import feedback — without this the canvas
+            just looked empty while a fetch was in flight. */}
+        {ready && !geometry && (
+          <div className="loading-pill">
+            <span className="loading-spinner" />
+            Solving fold…
+          </div>
+        )}
         {!paneOpen && (
           <button
             className="pane-reopen"

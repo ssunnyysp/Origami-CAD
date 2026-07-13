@@ -1,5 +1,6 @@
 import { Canvas } from "@react-three/fiber";
-import { OrbitControls } from "@react-three/drei";
+import { Grid, OrbitControls } from "@react-three/drei";
+import { DoubleSide } from "three";
 import type { FlasherGeometry } from "../../model/types";
 import { FlasherModel } from "./FlasherModel";
 import { FoldAnimator } from "./FoldAnimator";
@@ -49,6 +50,29 @@ export function Scene({ geometry, foldness, color, roughness, metalness }: Props
       <directionalLight position={[5, -6, 8]} intensity={1.5} />
       <directionalLight position={[-6, 4, 3]} intensity={0.5} />
       <ambientLight intensity={0.4} />
+      {/* Baseline reference grid, sitting exactly in the flat sheet's own
+          resting plane (z = 0, the plane the pinned hub never leaves — see
+          solver.py). Left unscaled and unrotated (a THREE.PlaneGeometry lies
+          in the XY plane by default) so it reads as a fixed drafting-table
+          surface: its cell size never changes across presets or imports,
+          only the model's apparent size relative to it does — a stable
+          ruler for "how big is this pattern," not just decoration. */}
+      <Grid
+        args={[80, 80]}
+        cellSize={2}
+        cellThickness={0.9}
+        cellColor="#a89e88"
+        sectionSize={10}
+        sectionThickness={1.3}
+        sectionColor="#b8794f"
+        fadeDistance={48}
+        fadeStrength={1}
+        infiniteGrid
+        // drei defaults to BackSide, visible only from -Z; the camera orbits
+        // around the +Z side (see the pinned hub's z=0 plane above) and the
+        // user can orbit underneath too, so both sides need to render.
+        side={DoubleSide}
+      />
       <FoldAnimator />
       <group scale={modelScale(geometry)}>
         <FlasherModel

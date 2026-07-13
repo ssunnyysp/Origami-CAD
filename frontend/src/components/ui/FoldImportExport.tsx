@@ -36,6 +36,7 @@ export function FoldImportExport({ geometry }: Props) {
   const [dragOver, setDragOver] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
+  const [justExported, setJustExported] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const handleFiles = (files: FileList | null) => {
@@ -51,6 +52,10 @@ export function FoldImportExport({ geometry }: Props) {
       const positions = interpolatePositions(geometry, foldness);
       const doc = await exportFold(geometry.pattern, positions, "Origami CAD export");
       downloadJson(doc, "origami-cad-export.fold");
+      // A silent download is easy to miss — a brief label swap confirms it
+      // actually happened (visibility of system status).
+      setJustExported(true);
+      setTimeout(() => setJustExported(false), 1800);
     } catch (err) {
       setExportError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -60,9 +65,8 @@ export function FoldImportExport({ geometry }: Props) {
 
   return (
     <div className="fold-io">
-      <span className="fold-io-label">FOLD file</span>
       <div
-        className={`fold-dropzone${dragOver ? " drag-over" : ""}`}
+        className={`fold-dropzone${dragOver ? " drag-over" : ""}${importedFileName && patternSource === "imported" ? " has-file" : ""}`}
         onDragOver={(e) => {
           e.preventDefault();
           setDragOver(true);
@@ -74,6 +78,11 @@ export function FoldImportExport({ geometry }: Props) {
           handleFiles(e.dataTransfer.files);
         }}
         onClick={() => inputRef.current?.click()}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") inputRef.current?.click();
+        }}
       >
         <input
           ref={inputRef}
@@ -82,11 +91,24 @@ export function FoldImportExport({ geometry }: Props) {
           hidden
           onChange={(e) => handleFiles(e.target.files)}
         />
-        {importing
-          ? "Importing…"
-          : importedFileName && patternSource === "imported"
-            ? `Loaded: ${importedFileName}`
-            : "Click or drop a .fold file"}
+        <span className="fold-dropzone-icon" aria-hidden="true">
+          ⌁
+        </span>
+        <span className="fold-dropzone-text">
+          {importing ? (
+            "Importing…"
+          ) : importedFileName && patternSource === "imported" ? (
+            <>
+              <strong>{importedFileName}</strong>
+              <small>click or drop to replace</small>
+            </>
+          ) : (
+            <>
+              <strong>Drop a .fold file</strong>
+              <small>or click to browse</small>
+            </>
+          )}
+        </span>
       </div>
 
       {importError && <p className="fold-error">{importError}</p>}
@@ -116,15 +138,21 @@ export function FoldImportExport({ geometry }: Props) {
         </ul>
       )}
 
-      {patternSource === "imported" && (
-        <button className="action-button" onClick={clearImport}>
-          Back to presets
+      <div className="fold-io-actions">
+        {patternSource === "imported" && (
+          <button className="action-button action-button--secondary" onClick={clearImport}>
+            Back to presets
+          </button>
+        )}
+        <button
+          className="action-button action-button--primary"
+          onClick={() => void handleExport()}
+          disabled={!geometry || exporting}
+          title={!geometry ? "Waiting for the model to finish loading" : undefined}
+        >
+          {exporting ? "Exporting…" : justExported ? "Saved ✓" : "Export FOLD"}
         </button>
-      )}
-
-      <button className="action-button" onClick={() => void handleExport()} disabled={!geometry || exporting}>
-        {exporting ? "Exporting…" : "Export FOLD"}
-      </button>
+      </div>
       {exportError && <p className="fold-error">{exportError}</p>}
     </div>
   );
