@@ -92,3 +92,38 @@ class GeometryResponse(BaseModel):
     # the client lerps between adjacent frames for arbitrary foldness values.
     foldnessSamples: list[float]
     frames: list[list[float]]
+
+
+# --- FOLD import/export (see app/fold/) -------------------------------------
+
+
+class FoldFrameInfo(BaseModel):
+    """One selectable frame from an uploaded FOLD file (the file's frame 0
+    plus each entry of file_frames), for the "pick which fold-state to load"
+    UI."""
+
+    index: int
+    title: str | None = None
+    classes: list[str] = []
+
+
+class FoldImportRequest(BaseModel):
+    document: dict
+    frameIndex: int | None = None
+
+
+class FoldImportResponse(BaseModel):
+    pattern: CreasePatternOut
+    foldnessSamples: list[float]
+    frames: list[list[float]]
+    availableFrames: list[FoldFrameInfo]
+    selectedFrameIndex: int
+    warnings: list[str]
+
+
+class FoldExportRequest(BaseModel):
+    pattern: CreasePatternOut
+    # The currently-displayed folded frame, xyz triples indexed by vertex id
+    # (i.e. exactly what interpolatePositions() produces client-side).
+    positions: list[float]
+    title: str = "Origami CAD export"
