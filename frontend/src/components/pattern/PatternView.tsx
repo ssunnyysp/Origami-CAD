@@ -1,6 +1,5 @@
 import { useMemo } from "react";
-import type { CreaseAssignment, FlasherParams } from "../../model/types";
-import { useFlasherGeometry } from "../../api/useFlasherGeometry";
+import type { CreaseAssignment, FlasherGeometry } from "../../model/types";
 
 // Mountain folds up (blue), valley folds down (red) — same convention as the
 // 3D crease overlay. Facet edges are drawn faintly as the construction grid.
@@ -14,9 +13,7 @@ const STROKES: Record<CreaseAssignment, { color: string; width: number }> = {
 const DRAW_ORDER: CreaseAssignment[] = ["facet", "mountain", "valley", "border"];
 
 // Flat 2D view of the crease pattern, like a printed folding diagram.
-export function PatternView({ params }: { params: FlasherParams }) {
-  const geometry = useFlasherGeometry(params);
-
+export function PatternView({ geometry }: { geometry: FlasherGeometry | null }) {
   const lines = useMemo(() => {
     if (!geometry) return null;
     const byId = new Map(geometry.pattern.vertices.map((v) => [v.id, v.position]));
@@ -28,9 +25,13 @@ export function PatternView({ params }: { params: FlasherParams }) {
     }));
   }, [geometry]);
 
-  if (!lines) return null;
+  if (!lines || !geometry) return null;
 
-  const half = params.gridDivisions / 2 + 0.6;
+  let maxAbs = 0;
+  for (const v of geometry.pattern.vertices) {
+    maxAbs = Math.max(maxAbs, Math.abs(v.position.x), Math.abs(v.position.y));
+  }
+  const half = (maxAbs || 1) + 0.6;
 
   return (
     <div className="pattern-view">

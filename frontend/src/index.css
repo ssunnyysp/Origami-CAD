@@ -234,6 +234,57 @@ input[type="color"]::-webkit-color-swatch {
   border-radius: 5px;
 }
 
+/* --- FOLD import/export --------------------------------------------------- */
+
+.fold-io {
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+
+.fold-io-label {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink-soft);
+}
+
+.fold-dropzone {
+  padding: 14px 10px;
+  border: 1px dashed var(--line);
+  border-radius: 9px;
+  text-align: center;
+  font-size: 12.5px;
+  color: var(--ink-soft);
+  background: #fff;
+  cursor: pointer;
+  transition: border-color 0.15s ease;
+}
+
+.fold-dropzone:hover,
+.fold-dropzone.drag-over {
+  border-color: var(--accent);
+  color: var(--ink);
+}
+
+.fold-error {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: #b3372c;
+}
+
+.fold-warnings {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  font-size: 11.5px;
+  color: var(--ink-soft);
+}
+
+.fold-warnings li {
+  margin-bottom: 4px;
+}
+
 /* --- Pattern view --------------------------------------------------------- */
 
 .pattern-view {

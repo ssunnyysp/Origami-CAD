@@ -1,18 +1,30 @@
 import { Canvas } from "@react-three/fiber";
 import { OrbitControls } from "@react-three/drei";
-import type { FlasherParams } from "../../model/types";
+import type { FlasherGeometry } from "../../model/types";
 import { FlasherModel } from "./FlasherModel";
 import { FoldAnimator } from "./FoldAnimator";
 
 interface Props {
-  params: FlasherParams;
+  geometry: FlasherGeometry | null;
   foldness: number;
   color: string;
   roughness: number;
   metalness: number;
 }
 
-export function Scene({ params, foldness, color, roughness, metalness }: Props) {
+// 16 units across regardless of the pattern's own coordinate scale — matches
+// whatever the flat generated flasher used to normalize to (gridDivisions
+// units across), generalized so an imported FOLD file (arbitrary units) gets
+// the same treatment.
+function modelScale(geometry: FlasherGeometry | null): number {
+  let maxAbs = 0;
+  for (const v of geometry?.pattern.vertices ?? []) {
+    maxAbs = Math.max(maxAbs, Math.abs(v.position.x), Math.abs(v.position.y));
+  }
+  return maxAbs > 0 ? 16 / (2 * maxAbs) : 1;
+}
+
+export function Scene({ geometry, foldness, color, roughness, metalness }: Props) {
   // Never remount the Canvas — it blanks the view while the WebGL context and
   // scene rebuild. Instead of moving the camera per preset, the model group
   // is scale-normalized to a 16-unit sheet and the camera stays fixed.
@@ -38,9 +50,9 @@ export function Scene({ params, foldness, color, roughness, metalness }: Props) 
       <directionalLight position={[-6, 4, 3]} intensity={0.5} />
       <ambientLight intensity={0.4} />
       <FoldAnimator />
-      <group scale={16 / params.gridDivisions}>
+      <group scale={modelScale(geometry)}>
         <FlasherModel
-          params={params}
+          geometry={geometry}
           foldness={foldness}
           color={color}
           roughness={roughness}

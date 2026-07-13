@@ -74,3 +74,26 @@ export interface FlasherGeometry {
   foldnessSamples: number[];
   frames: number[][];
 }
+
+// --- FOLD import/export (see backend/app/fold/) -----------------------------
+// A FOLD file's raw JSON shape isn't modeled here — the browser just does
+// JSON.parse() on the uploaded text and posts the resulting object straight
+// through to POST /api/fold/import, which does all the parsing/validation.
+
+export interface FoldFrameInfo {
+  index: number;
+  title: string | null;
+  classes: string[];
+}
+
+// Response of POST /api/fold/import: same shape as FlasherGeometry plus the
+// list of selectable frames (for files with more than one fold state) and
+// any non-fatal parsing warnings (e.g. "no edges_assignment in file").
+export interface FoldImportResponse {
+  pattern: CreasePattern;
+  foldnessSamples: number[];
+  frames: number[][];
+  availableFrames: FoldFrameInfo[];
+  selectedFrameIndex: number;
+  warnings: string[];
+}

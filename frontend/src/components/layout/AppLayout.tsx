@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useActiveGeometry } from "../../api/useActiveGeometry";
 import { useAppStore } from "../../store/useAppStore";
 import { Scene } from "../scene/Scene";
 import { ControlPanel } from "../ui/ControlPanel";
@@ -22,6 +23,9 @@ export function AppLayout() {
   }, [loadPresets]);
 
   const params = { gridDivisions, layerGapRatio, heightRatio };
+  // Either the generated preset's geometry or an imported FOLD file's,
+  // depending on store.patternSource — see api/useActiveGeometry.ts.
+  const geometry = useActiveGeometry(params);
 
   return (
     <div className="app-layout">
@@ -31,14 +35,14 @@ export function AppLayout() {
             view so switching back never rebuilds the WebGL context. */}
         {ready && (
           <Scene
-            params={params}
+            geometry={geometry}
             foldness={foldness}
             color={paperColor}
             roughness={roughness}
             metalness={metalness}
           />
         )}
-        {ready && viewMode === "pattern" && <PatternView params={params} />}
+        {ready && viewMode === "pattern" && <PatternView geometry={geometry} />}
         {!paneOpen && (
           <button
             className="pane-reopen"
@@ -66,7 +70,7 @@ export function AppLayout() {
               ⟩
             </button>
           </div>
-          <ControlPanel />
+          <ControlPanel geometry={geometry} />
         </aside>
       )}
     </div>
