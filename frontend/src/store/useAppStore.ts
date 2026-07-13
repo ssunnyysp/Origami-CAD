@@ -16,10 +16,9 @@ interface AppState {
   paperColor: string;
   roughness: number;
   metalness: number;
-  sides: number;
-  rings: number;
-  pleatRatio: number;
-  twistRatio: number;
+  gridDivisions: number;
+  layerGapRatio: number;
+  heightRatio: number;
 
   loadPresets: () => Promise<void>;
   setFoldness: (t: number) => void;
@@ -37,10 +36,9 @@ function applyPreset(preset: FlasherPreset) {
     paperColor: preset.paperColor,
     roughness: preset.roughness,
     metalness: preset.metalness,
-    sides: preset.sides,
-    rings: preset.rings,
-    pleatRatio: preset.pleatRatio,
-    twistRatio: preset.twistRatio,
+    gridDivisions: preset.gridDivisions,
+    layerGapRatio: preset.layerGapRatio,
+    heightRatio: preset.heightRatio,
   };
 }
 
@@ -54,10 +52,9 @@ export const useAppStore = create<AppState>((set, get) => ({
   paperColor: "#d97757",
   roughness: 0.8,
   metalness: 0.02,
-  sides: 6,
-  rings: 3,
-  pleatRatio: 0.45,
-  twistRatio: 0.55,
+  gridDivisions: 7,
+  layerGapRatio: 0.1,
+  heightRatio: 0.9,
 
   loadPresets: async () => {
     if (get().presets.length > 0) return;

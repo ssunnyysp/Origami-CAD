@@ -25,11 +25,9 @@ export interface Edge {
 
 export interface Face {
   id: number;
-  vertexIds: number[]; // ordered, CCW in the flat pattern; triangles, except
-  // face 0 (the hub), which is the convex regular n-gon — see FlasherMesh's
-  // fan triangulation
+  vertexIds: number[]; // ordered, CCW in the flat pattern; triangles only
   edgeIds: number[]; // edges bounding this face, same winding order as vertexIds
-  ringIndex: number; // which concentric ring this face belongs to (0 = central polygon)
+  ringIndex: number; // which concentric ring this face belongs to (0 = central square)
 }
 
 // Face-adjacency spanning-tree data, kept even though the current fold engine
@@ -49,15 +47,13 @@ export interface CreasePattern {
   sides: number; // n
 }
 
-// Hexagon/octagon-flasher parameters: a regular `sides`-gon hub surrounded
-// by `rings` concentric rings of trapezoidal panels, each ring twisted by a
-// fixed angle relative to the ring inside it. Body of POST
-// /api/flasher/geometry.
+// Square-flasher parameters. The sheet is always a square, gridDivisions×
+// gridDivisions grid units around a single central hub cell (gridDivisions
+// must be odd). Body of POST /api/flasher/geometry.
 export interface FlasherParams {
-  sides: number; // n, even (6 = hexagon, 8 = octagon)
-  rings: number; // m, concentric pleat ring count
-  pleatRatio: number; // ring radial width, as a fraction of the hub apothem
-  twistRatio: number; // twist angle per ring, as a fraction of pi/sides
+  gridDivisions: number; // N, odd; ring count = (N-1)/2
+  layerGapRatio: number; // unused, kept for API compatibility
+  heightRatio: number; // unused, kept for API compatibility
 }
 
 export interface FlasherPreset extends FlasherParams {

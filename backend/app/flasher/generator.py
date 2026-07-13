@@ -1,60 +1,62 @@
-"""Hexagon/octagon flasher crease-pattern generator — a true "twist fold":
-a regular n-gon hub surrounded by m concentric rings, each ring rotated
-("twisted") by a fixed angle relative to the ring inside it. This is the
-standard construction behind real flashers (Shafer, Lang's "twist" family,
-the Guest & Pellegrino wrapping-fold): a central polygon, plus rings of
-congruent trapezoidal panels, plus radial "spoke" creases that let each ring
-rotate relative to its neighbor.
+"""Square flasher crease-pattern generator — central square pivot, concentric
+twisted rings, crossed spokes.
 
-## Geometry
+## Two designs that were tried and measured to be non-rigid-foldable
 
-n = `sides` (hub/ring side count, must be even — 6 or 8 for a hexagon or
-octagon hub). m = `rings` (pleat ring count).
+**Design 1** (diagonal reverse-fold at trimmed/untrimmed corners): every
+ring's four sides run corner-to-corner, with a single reverse-fold diagonal
+cut at each corner. Measuring the actual creases meeting at the hub's own
+corner found exactly THREE real creases: two hub-boundary mountains
+(perpendicular) plus one diagonal valley. Maekawa's theorem requires
+mountain-count minus valley-count to be even at every interior vertex
+(it equals degree − 2·valley-count, so it shares degree's parity); three
+creases can never satisfy that. A degree-3 vertex is a spherical 3-bar
+linkage, which — like a rigid triangle under SSS — has zero internal
+degrees of freedom for generic side lengths (this pattern's actual sector
+angles were measured to be 171.1°/98.9°/90°, not the special degenerate
+case that would allow motion). It cannot rigidly fold at all.
 
-Ring k's n corners sit on a circle of radius R_k, at angles offset by a fixed
-twist φ from ring (k-1)'s corners:
+**Design 2** (single straight spoke per ring corner, this file's first
+version): ring k's corner i connects to ring (k−1)'s corner i by one
+radial spoke; this DOES give interior ring corners (0 < k < rings) proper
+degree 4 with mountain−valley = ±2 (provable: the two circumferential
+creases share a sign, and spoke_gender(k,i) is always the opposite of
+spoke_gender(k+1,i)). But it reproduces the exact same degree-3 problem at
+the hub's own corners (hub's 2 boundary creases + 1 outward spoke = 3),
+because the hub has no "ring −1" to supply a matching inward spoke.
+Measured directly: 8 of 12 crease-pattern vertices failed Maekawa on a
+5×5-equivalent grid, all of them at the hub or the outermost ring.
 
-    C[k][i] = R_k * (cos(θ_i + k·φ), sin(θ_i + k·φ)),   θ_i = 2π·i/n
+## This design: crossed spokes
 
-R_k grows linearly with the ring's *apothem* (so pleat rings have constant
-radial width w = `pleat_ratio` · hub apothem): R_k = (a0 + k·w) / cos(π/n).
+Between ring k−1 and ring k, panel i (spanning corner i to i+1) is the
+quadrilateral `C[k-1][i], C[k-1][i+1], C[k][i+1], C[k][i]`. Instead of
+leaving this panel's diagonal as an uncreased ("facet") triangulation seam,
+it is a REAL crease — `cross_gender(k, i+1)`, connecting `C[k-1][i+1]` to
+`C[k][i]` — so each ring transition contributes TWO spoke-type creases per
+corner instead of one: a straight spoke `spoke_gender(k, i)` (shared
+between panel i−1 and panel i) and a crossed spoke (the diagonal of
+panel i+1, reaching back to touch corner i).
 
-Every ring's corners are the SAME polygon, just scaled up and rotated by kφ —
-so ring k is congruent to ring 0 (up to scale), and every one of its n
-panels is congruent to the others by n-fold rotational symmetry. φ is the
-"twisted at a consistent angle ring-to-ring" the whole model turns on: φ = 0
-reproduces mirror-symmetric nested polygons (which can only dome, never
-twist — no rotational handedness); any φ ≠ 0 makes the pattern chiral, which
-is what lets every ring rotate the SAME way simultaneously when folded (the
-actual flasher wrap motion).
+This changes every corner's degree:
+- **Hub corner i** (k=0): 2 boundary creases + spokes to ring 1's corners i
+  and i−1 (the straight spoke of panel i, and the crossed spoke of panel
+  i+1, which both touch hub corner i) = degree 4.
+- **Interior ring corner i** (0 < k < rings): 2 circumferential (ring k's
+  own boundary) + 2 inward (straight spoke(k,i), crossed spoke(k,i+1)) + 2
+  outward (straight spoke(k+1,i), crossed spoke(k+1,i)) = degree 6.
+- **Outermost ring corner** (k = rings): the outer boundary is the sheet's
+  physical edge (not a crease), so only the 2 inward spoke-type creases
+  meet there — a boundary-adjacent vertex, which (like the outer corners of
+  any cut sheet) does not need to satisfy Maekawa, since the paper does not
+  wrap a full 360° around it.
 
-## Panels
-
-Between ring k-1 and ring k, side i is the quadrilateral
-
-    C[k-1][i], C[k-1][i+1], C[k][i+1], C[k][i]
-
-Its two "circumferential" sides (C[k-1][i]-C[k-1][i+1] and C[k][i]-C[k][i+1])
-are congruent copies of the same polygon edge at different radii; its two
-"spoke" sides (C[k-1][i]-C[k][i] and C[k-1][i+1]-C[k][i+1]) are the radial
-creases that let ring k hinge relative to ring k-1. Because a quadrilateral
-with skewed (non-parallel) legs isn't guaranteed planar once its 4 corners
-move independently, each panel is split by its own short diagonal into 2
-triangles for meshing/solving — this diagonal is a facet edge (never a real
-crease, always flat), and it is entirely internal to one panel, so it never
-rigidly welds one panel to its neighbor the way an earlier (discarded)
-version of this generator did by threading facet edges *between* panels.
-
-## Crease assignment
-
-- Circumferential creases alternate mountain/valley ring-to-ring:
-  `ring_gender(k)` — the hub's own boundary (k=0) is always "mountain"; the
-  outermost ring boundary (k=m) has no panel beyond it, so it is the sheet's
-  physical edge ("border"), not a fold.
-- Spoke creases alternate mountain/valley AROUND each ring (by corner index
-  i), so a single ring's n radial creases are not all the same sense —
-  consistent with a real flasher CP, where consecutive spokes fold opposite
-  ways to let the ring gather into a stack rather than cone outward.
+`spoke_gender`/`cross_gender`'s docstrings give the parity argument for why
+every interior vertex (hub and true interior rings alike) measures
+mountain−valley = ±2 unconditionally; `scripts/validate_flasher.py` checks
+this directly against the generated pattern (not just trusts the proof)
+before any folding is attempted, exactly because the two earlier designs
+looked reasonable on paper and were only caught by direct measurement.
 """
 
 from __future__ import annotations
@@ -63,13 +65,17 @@ import math
 from dataclasses import dataclass, field
 
 HUB_CENTER = (0.0, 0.0)
-HUB_APOTHEM = 1.0  # fixed hub half-width (apothem); everything else scales off this
+HUB_APOTHEM = 0.5  # half-width of the single central hub cell (grid units)
+SIDES = 4  # the paper is always square
+PLEAT_WIDTH = 1.0  # one grid unit per ring, so ring count matches (N-1)/2
+TWIST_RATIO = 0.55  # twist per ring, as a fraction of pi/SIDES — tuned via
+# scripts/validate_flasher.py (see PR description for the sweep); any value
+# in (0, 1) keeps the pattern chiral.
 
 
 def ring_gender(k: int) -> str:
     """Mountain/valley of ring k's own circumferential boundary crease.
-    k=0 is the hub's own boundary (always mountain — the wrap's first
-    fold), alternating outward from there."""
+    k=0 is the hub's own boundary (always mountain), alternating outward."""
     if k == 0:
         return "mountain"
     return "mountain" if k % 2 == 1 else "valley"
@@ -80,28 +86,51 @@ def _opposite(gender: str) -> str:
 
 
 def spoke_gender(k: int, i: int) -> str:
-    """Mountain/valley of the radial spoke crease between ring k-1's corner i
-    and ring k's corner i. Alternates by corner index i around the ring (not
-    just ring-to-ring like the circumferential creases) — every other spoke
-    in a ring folds the opposite way, which is what lets the ring gather
-    into a flat stack instead of coning outward when the circumferential
-    creases pull it closed."""
+    """Mountain/valley of the straight radial spoke between ring k-1's
+    corner i and ring k's corner i. Alternates by corner index i around the
+    ring, with the base flipping every ring (since ring_gender alternates
+    by k) — so spoke_gender(k, i) and spoke_gender(k+1, i) are always
+    opposite of each other for every i."""
     base = _opposite(ring_gender(k))
     return base if i % 2 == 0 else _opposite(base)
 
 
+def cross_gender(i: int) -> str:
+    """Mountain/valley of the crossed spoke (a ring panel's own diagonal),
+    indexed by the corner it touches. Deliberately independent of k: at
+    interior ring corner i, the four spoke-type creases are
+    {spoke_gender(k,i), cross_gender(i+1), spoke_gender(k+1,i),
+    cross_gender(i)}. Because spoke_gender(k,i) and spoke_gender(k+1,i) are
+    always opposite (see spoke_gender), and cross_gender(i) is independent
+    of k while cross_gender(i+1) is the opposite of cross_gender(i) (it
+    alternates with i, same as spoke_gender's own i-alternation) — the four
+    creases are provably two matched opposite pairs, i.e. exactly 2
+    mountain + 2 valley, for every interior ring corner and every k. At the
+    hub (k=0, no inward spokes), the two creases touching hub corner i are
+    the straight spoke of panel i (spoke_gender(1,i)) and the crossed spoke
+    of panel i+1 (cross_gender(i)) — an independent pair, not required to
+    balance against anything else, so any fixed assignment works there;
+    what matters is that together with the 2 boundary mountains they total
+    an even degree (4), which they do by construction (2 boundary + 2
+    spoke-type, always 4 total)."""
+    return "mountain" if i % 2 == 0 else "valley"
+
+
 @dataclass(frozen=True)
 class FlasherParams:
-    sides: int  # n; hub/ring polygon side count, must be even (6 or 8)
-    rings: int  # m; number of concentric pleat rings, >= 1
-    pleat_ratio: float  # ring radial width, as a fraction of the hub apothem
-    twist_ratio: float  # twist angle per ring, as a fraction of pi/sides (0,1)
+    grid_divisions: int  # N; sheet is conceptually N×N grid units, N odd
+    layer_gap_ratio: float  # unused (kept for API compatibility)
+    height_ratio: float  # unused (kept for API compatibility)
+
+    @property
+    def rings(self) -> int:
+        return (self.grid_divisions - 1) // 2
 
 
 @dataclass
 class Vertex:
     id: int
-    position: tuple[float, float]  # flat-pattern coordinates, hub center at origin
+    position: tuple[float, float]
 
 
 @dataclass
@@ -127,7 +156,7 @@ class CreasePattern:
     faces: list[Face]
     adjacency: list[dict] = field(default_factory=list)
     ring_count: int = 0
-    sides: int = 6
+    sides: int = 4
 
 
 def _signed_area(pts: list[tuple[float, float]]) -> float:
@@ -138,18 +167,20 @@ def _signed_area(pts: list[tuple[float, float]]) -> float:
 
 
 def generate_flasher(params: FlasherParams) -> CreasePattern:
-    n = params.sides
+    n = params.grid_divisions
+    if n % 2 != 1:
+        raise ValueError(
+            "grid_divisions must be odd, so the sheet has a single, well-centered "
+            "hub cell (an even count splits the center between four cells)"
+        )
     m = params.rings
-    if n % 2 != 0 or n < 4:
-        raise ValueError("sides must be even and >= 4 (a hexagon=6 or octagon=8 hub)")
     if m < 1:
-        raise ValueError("rings must be >= 1")
-    if not (0.0 < params.twist_ratio < 1.0):
-        raise ValueError("twist_ratio must be in (0, 1) — 0 gives a non-chiral pattern")
+        raise ValueError("grid_divisions must be >= 3 (at least one ring)")
 
-    half_angle = math.pi / n
-    phi = params.twist_ratio * half_angle  # twist per ring
-    w = params.pleat_ratio * HUB_APOTHEM  # radial pleat width
+    sides = SIDES
+    half_angle = math.pi / sides
+    phi = TWIST_RATIO * half_angle
+    w = PLEAT_WIDTH
 
     def radius(k: int) -> float:
         apothem = HUB_APOTHEM + k * w
@@ -157,20 +188,18 @@ def generate_flasher(params: FlasherParams) -> CreasePattern:
 
     def corner(k: int, i: int) -> tuple[float, float]:
         r = radius(k)
-        theta = 2.0 * math.pi * i / n + k * phi
+        theta = 2.0 * math.pi * i / sides + k * phi
         return (r * math.cos(theta), r * math.sin(theta))
 
     def vid(k: int, i: int) -> int:
-        return k * n + (i % n)
+        return k * sides + (i % sides)
 
-    # --- vertices ------------------------------------------------------
     vertices: list[Vertex] = []
     for k in range(m + 1):
-        for i in range(n):
+        for i in range(sides):
             vertices.append(Vertex(id=vid(k, i), position=corner(k, i)))
     positions = {v.id: v.position for v in vertices}
 
-    # --- edges -----------------------------------------------------------
     edges: list[Edge] = []
     edge_id_by_key: dict[tuple[int, int], int] = {}
 
@@ -189,18 +218,12 @@ def generate_flasher(params: FlasherParams) -> CreasePattern:
             return "border"
         return ring_gender(k)
 
-    # --- faces -------------------------------------------------------------
     faces: list[Face] = []
 
     def make_face(vertex_ids: list[int], edge_assignments: list[str], ring_index: int) -> None:
         pts = [positions[v] for v in vertex_ids]
         if _signed_area(pts) < 0:
             length = len(vertex_ids)
-            # Reversed vertex list: rev[j] = orig[-1-j]. Edge j of the
-            # reversed polygon runs rev[j]-rev[j+1] = orig[-1-j]-orig[-2-j],
-            # i.e. the same *segment* as original edge index (length-2-j) —
-            # re-derived directly rather than trusting a slice trick, since
-            # an earlier version of this got the alignment wrong.
             vertex_ids = vertex_ids[::-1]
             edge_assignments = [edge_assignments[(length - 2 - j) % length] for j in range(length)]
         edge_ids = [
@@ -209,49 +232,29 @@ def generate_flasher(params: FlasherParams) -> CreasePattern:
         ]
         faces.append(Face(id=len(faces), vertex_ids=vertex_ids, edge_ids=edge_ids, ring_index=ring_index))
 
-    # Hub: a single rigid regular n-gon.
-    hub_ids = [vid(0, i) for i in range(n)]
-    hub_edge_assignments = [circumferential_assignment(0) for _ in range(n)]
+    # Hub: a single rigid square — the fixed pivot everything else rotates
+    # relative to.
+    hub_ids = [vid(0, i) for i in range(sides)]
+    hub_edge_assignments = [circumferential_assignment(0) for _ in range(sides)]
     make_face(hub_ids, hub_edge_assignments, ring_index=0)
 
-    # Ring panels k=1..m, each split into 2 triangles by its shorter diagonal.
+    # Ring panels k=1..m. Panel i spans corner i to i+1; its own diagonal
+    # (inner_b=vid(k-1,i+1) to outer_a=vid(k,i)) is the CROSSED spoke
+    # cross_gender(i+1) — a real crease, not a facet triangulation seam —
+    # which is what gives every interior corner its required even degree.
     for k in range(1, m + 1):
-        for i in range(n):
+        for i in range(sides):
             inner_a, inner_b = vid(k - 1, i), vid(k - 1, i + 1)
             outer_a, outer_b = vid(k, i), vid(k, i + 1)
             circ_in = circumferential_assignment(k - 1)
             circ_out = circumferential_assignment(k)
-            spoke_a = spoke_gender(k, i)  # inner_a - outer_a
-            spoke_b = spoke_gender(k, i + 1)  # inner_b - outer_b
+            spoke_a = spoke_gender(k, i)  # inner_a - outer_a (shared with panel i-1)
+            spoke_b = spoke_gender(k, i + 1)  # inner_b - outer_b (shared with panel i+1)
+            diag = cross_gender(i + 1)  # inner_b - outer_a (this panel's own diagonal)
 
-            d1 = math.dist(positions[inner_a], positions[outer_b])  # inner_a-outer_b
-            d2 = math.dist(positions[inner_b], positions[outer_a])  # inner_b-outer_a
-            if d1 <= d2:
-                # triangles (inner_a, inner_b, outer_b) and (inner_a, outer_b, outer_a)
-                make_face(
-                    [inner_a, inner_b, outer_b],
-                    [circ_in, spoke_b, "facet"],
-                    ring_index=k,
-                )
-                make_face(
-                    [inner_a, outer_b, outer_a],
-                    ["facet", circ_out, spoke_a],
-                    ring_index=k,
-                )
-            else:
-                # triangles (inner_a, inner_b, outer_a) and (inner_b, outer_b, outer_a)
-                make_face(
-                    [inner_a, inner_b, outer_a],
-                    [circ_in, "facet", spoke_a],
-                    ring_index=k,
-                )
-                make_face(
-                    [inner_b, outer_b, outer_a],
-                    [spoke_b, circ_out, "facet"],
-                    ring_index=k,
-                )
+            make_face([inner_a, inner_b, outer_a], [circ_in, diag, spoke_a], ring_index=k)
+            make_face([inner_b, outer_b, outer_a], [spoke_b, circ_out, diag], ring_index=k)
 
-    # Face adjacency: any two faces sharing an edge id are neighbors.
     faces_by_edge: dict[int, list[int]] = {}
     for face in faces:
         for edge_id in face.edge_ids:
@@ -270,5 +273,5 @@ def generate_flasher(params: FlasherParams) -> CreasePattern:
         faces=faces,
         adjacency=adjacency,
         ring_count=m,
-        sides=n,
+        sides=sides,
     )
