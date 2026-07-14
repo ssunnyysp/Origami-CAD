@@ -4,10 +4,15 @@
   --serif: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
   --ink: #2b2926;
   --ink-soft: #8a8579;
+  --ink-faint: #b5afa1;
   --paper: #f4f1ea;
   --pane: #fbfaf7;
   --line: rgba(43, 41, 38, 0.1);
   --accent: #c96f4a; /* warm terracotta — reads "paper", not "tech" */
+  --accent-ink: #fff8f2; /* text/icon color on top of a solid accent fill */
+  --error: #b3372c;
+  --shadow-sm: 0 1px 2px rgba(43, 41, 38, 0.05);
+  --shadow-md: 0 2px 10px rgba(43, 41, 38, 0.1);
 }
 
 * {
@@ -117,6 +122,27 @@ body {
 
 /* --- Controls ------------------------------------------------------------ */
 
+.panel-section {
+  padding-top: 18px;
+  margin-top: 18px;
+  border-top: 1px solid var(--line);
+}
+
+.panel-section--first {
+  padding-top: 0;
+  margin-top: 0;
+  border-top: none;
+}
+
+.section-label {
+  margin: 0 0 14px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
 .control-row {
   display: grid;
   grid-template-columns: 78px 1fr 44px;
@@ -124,6 +150,11 @@ body {
   gap: 10px;
   margin-bottom: 16px;
   font-size: 13px;
+}
+
+.panel-section > .control-row:last-child,
+.panel-section > .action-button:last-child {
+  margin-bottom: 0;
 }
 
 .control-row > span:first-child {
@@ -170,11 +201,60 @@ body {
   border: 1px solid var(--line);
   border-radius: 9px;
   cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    color 0.15s ease,
+    background-color 0.15s ease,
+    transform 0.08s ease,
+    box-shadow 0.15s ease;
 }
 
 .action-button:hover {
   border-color: var(--accent);
   color: var(--accent);
+}
+
+.action-button:active {
+  transform: translateY(1px);
+}
+
+.action-button:disabled {
+  cursor: default;
+  opacity: 0.55;
+  transform: none;
+}
+
+.action-button:disabled:hover {
+  border-color: var(--line);
+  color: var(--ink);
+}
+
+/* Secondary: the existing outlined look, for reversible/lower-stakes actions
+   (switching views, leaving import mode). */
+.action-button--secondary {
+  color: var(--ink-soft);
+}
+
+/* Primary: a solid accent fill, reserved for the one deliberate/rarer action
+   in a given section (exporting a file) — a visual hierarchy between
+   actions instead of every button reading with equal weight. */
+.action-button--primary {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--accent-ink);
+  box-shadow: var(--shadow-sm);
+}
+
+.action-button--primary:hover {
+  background: #b4603d;
+  border-color: #b4603d;
+  color: var(--accent-ink);
+}
+
+.action-button--primary:disabled:hover {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-ink);
 }
 
 /* Slider */
@@ -207,11 +287,55 @@ input[type="range"]::-moz-range-thumb {
   box-shadow: 0 1px 4px rgba(43, 41, 38, 0.25);
 }
 
-input[type="checkbox"] {
-  accent-color: var(--accent);
-  width: 15px;
-  height: 15px;
+/* Toggle switch (AnimateToggle) — a real checkbox underneath for a11y/
+   keyboard support, visually replaced with a pill + thumb instead of the
+   bare browser-default checkbox square. */
+.switch {
+  position: relative;
+  display: inline-flex;
+  width: 38px;
+  height: 22px;
+}
+
+.switch input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  margin: 0;
   cursor: pointer;
+  z-index: 1;
+}
+
+.switch-track {
+  position: absolute;
+  inset: 0;
+  border-radius: 999px;
+  background: rgba(43, 41, 38, 0.14);
+  transition: background-color 0.18s ease;
+}
+
+.switch-thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: var(--shadow-sm);
+  transition: transform 0.18s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.switch input:checked ~ .switch-track {
+  background: var(--accent);
+}
+
+.switch input:checked ~ .switch-track .switch-thumb {
+  transform: translateX(16px);
+}
+
+.switch input:focus-visible ~ .switch-track {
+  box-shadow: 0 0 0 2px #fff, 0 0 0 4px var(--accent);
 }
 
 input[type="color"] {
@@ -232,6 +356,147 @@ input[type="color"]::-webkit-color-swatch-wrapper {
 input[type="color"]::-webkit-color-swatch {
   border: none;
   border-radius: 5px;
+}
+
+/* --- FOLD import/export --------------------------------------------------- */
+
+.fold-dropzone {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fff;
+  cursor: pointer;
+  box-shadow: var(--shadow-sm);
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease,
+    transform 0.08s ease;
+}
+
+.fold-dropzone:hover {
+  border-color: rgba(43, 41, 38, 0.22);
+}
+
+.fold-dropzone.drag-over {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(201, 111, 74, 0.14);
+  transform: translateY(-1px);
+}
+
+.fold-dropzone.has-file {
+  border-color: rgba(201, 111, 74, 0.35);
+  background: #fefaf7;
+}
+
+.fold-dropzone-icon {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  background: var(--paper);
+  color: var(--accent);
+  font-size: 15px;
+}
+
+.fold-dropzone-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  font-size: 12.5px;
+  color: var(--ink-soft);
+  min-width: 0;
+}
+
+.fold-dropzone-text strong {
+  color: var(--ink);
+  font-weight: 550;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fold-dropzone-text small {
+  font-size: 11px;
+  color: var(--ink-faint);
+}
+
+.fold-io > .control-row {
+  margin-top: 12px;
+  margin-bottom: 0;
+}
+
+.fold-io-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.fold-io-actions .action-button {
+  margin-top: 0;
+}
+
+.fold-error {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: var(--error);
+}
+
+.fold-warnings {
+  margin: 10px 0 0;
+  padding: 8px 10px 8px 24px;
+  border-radius: 8px;
+  background: rgba(201, 111, 74, 0.08);
+  font-size: 11.5px;
+  color: var(--ink-soft);
+}
+
+.fold-warnings li {
+  margin-bottom: 4px;
+}
+
+.fold-warnings li:last-child {
+  margin-bottom: 0;
+}
+
+/* --- Loading state --------------------------------------------------------- */
+
+.loading-pill {
+  position: absolute;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 16px;
+  border-radius: 999px;
+  background: var(--pane);
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow-md);
+  font-size: 12.5px;
+  color: var(--ink-soft);
+  z-index: 2;
+}
+
+.loading-spinner {
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  border: 2px solid rgba(201, 111, 74, 0.25);
+  border-top-color: var(--accent);
+  animation: spin 0.7s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 /* --- Pattern view --------------------------------------------------------- */

@@ -1,18 +1,31 @@
 import { Canvas } from "@react-three/fiber";
-import { OrbitControls } from "@react-three/drei";
-import type { FlasherParams } from "../../model/types";
+import { Grid, OrbitControls } from "@react-three/drei";
+import { DoubleSide } from "three";
+import type { FlasherGeometry } from "../../model/types";
 import { FlasherModel } from "./FlasherModel";
 import { FoldAnimator } from "./FoldAnimator";
 
 interface Props {
-  params: FlasherParams;
+  geometry: FlasherGeometry | null;
   foldness: number;
   color: string;
   roughness: number;
   metalness: number;
 }
 
-export function Scene({ params, foldness, color, roughness, metalness }: Props) {
+// 16 units across regardless of the pattern's own coordinate scale — matches
+// whatever the flat generated flasher used to normalize to (gridDivisions
+// units across), generalized so an imported FOLD file (arbitrary units) gets
+// the same treatment.
+function modelScale(geometry: FlasherGeometry | null): number {
+  let maxAbs = 0;
+  for (const v of geometry?.pattern.vertices ?? []) {
+    maxAbs = Math.max(maxAbs, Math.abs(v.position.x), Math.abs(v.position.y));
+  }
+  return maxAbs > 0 ? 16 / (2 * maxAbs) : 1;
+}
+
+export function Scene({ geometry, foldness, color, roughness, metalness }: Props) {
   // Never remount the Canvas — it blanks the view while the WebGL context and
   // scene rebuild. Instead of moving the camera per preset, the model group
   // is scale-normalized to a 16-unit sheet and the camera stays fixed.
@@ -37,10 +50,33 @@ export function Scene({ params, foldness, color, roughness, metalness }: Props) 
       <directionalLight position={[5, -6, 8]} intensity={1.5} />
       <directionalLight position={[-6, 4, 3]} intensity={0.5} />
       <ambientLight intensity={0.4} />
+      {/* Baseline reference grid, sitting exactly in the flat sheet's own
+          resting plane (z = 0, the plane the pinned hub never leaves — see
+          solver.py). Left unscaled and unrotated (a THREE.PlaneGeometry lies
+          in the XY plane by default) so it reads as a fixed drafting-table
+          surface: its cell size never changes across presets or imports,
+          only the model's apparent size relative to it does — a stable
+          ruler for "how big is this pattern," not just decoration. */}
+      <Grid
+        args={[80, 80]}
+        cellSize={2}
+        cellThickness={0.9}
+        cellColor="#a89e88"
+        sectionSize={10}
+        sectionThickness={1.3}
+        sectionColor="#b8794f"
+        fadeDistance={48}
+        fadeStrength={1}
+        infiniteGrid
+        // drei defaults to BackSide, visible only from -Z; the camera orbits
+        // around the +Z side (see the pinned hub's z=0 plane above) and the
+        // user can orbit underneath too, so both sides need to render.
+        side={DoubleSide}
+      />
       <FoldAnimator />
-      <group scale={16 / params.gridDivisions}>
+      <group scale={modelScale(geometry)}>
         <FlasherModel
-          params={params}
+          geometry={geometry}
           foldness={foldness}
           color={color}
           roughness={roughness}

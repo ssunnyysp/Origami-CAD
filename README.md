@@ -55,20 +55,39 @@ creases. `docs/FLASHER_NOTES.md` describes the earlier polygonal model this repl
 ## Project layout
 
 - `backend/app/flasher/` — crease-pattern generator, kinematic fold engine, PBD fold solver
+- `backend/app/fold/` — FOLD file format import/export (see below)
 - `backend/app/schemas.py` — the API contract (mirrored by `frontend/src/model/types.ts`)
 - `backend/app/presets.py` — curated flasher presets
-- `frontend/src/api/` — typed API client and the geometry-fetching hook
+- `frontend/src/api/` — typed API client and the geometry-fetching hooks
 - `frontend/src/model/` — shared API types and the frame-interpolation helper
 - `frontend/src/components/scene/` — the `@react-three/fiber` scene and mesh/crease rendering
-- `frontend/src/components/ui/` — control panel widgets (model selector, sliders, color picker)
-- `frontend/src/store/` — zustand store holding presets, active params, and view settings
+- `frontend/src/components/ui/` — control panel widgets (model selector, sliders, color picker, FOLD import/export)
+- `frontend/src/store/` — zustand store holding presets, active params, view settings, and imported-file state
+
+## FOLD file support
+
+Import and export of the [FOLD format](https://github.com/edemaine/fold) (the JSON-based
+interchange format used by Origami Simulator, Rabbit Ear, and academic rigid-origami tools):
+
+- **Import**: drag a `.fold` file onto the control panel (or click to browse). Multi-frame
+  files (e.g. a flat crease pattern plus one or more folded states) show a frame picker.
+  A flat crease-pattern frame is animated with a generic, best-effort fold solver (the same
+  approach as the flasher solver, generalized to a pattern with no known hub); an
+  already-folded 3-D frame is shown as a static pose rather than an invented animation.
+  Malformed files fail with a specific error message instead of crashing.
+- **Export**: the "Export FOLD" button serializes whatever is currently on screen (generated
+  or imported) into a `.fold` file — the flat pattern as frame 0, the current folded pose as
+  an inheriting `file_frames` entry — and is round-trip compatible: re-importing frame 0
+  reconstructs the same pattern.
+- See `backend/app/fold/` for the parser/writer and `scripts/validate_fold.py` for the
+  round-trip + sample-file validation harness.
 
 ## Not yet built (future work)
 
 See `docs/FLASHER_NOTES.md` for the full roadmap. Highlights:
 
 - Exact zero-thickness flasher geometry (polygon-involute arms, pleated arms / Lang's height order)
-- Import/export (the FOLD format, SVG cut/score files)
+- SVG cut/score file export
 - A true per-hinge rigid-origami solver (currently kinematic target + edge-length projection)
 
 ## Development
