@@ -1,8 +1,9 @@
 # Origami CAD
 
-A showcase viewer for parametric origami "flasher" patterns — deployable, concentric-ring
-twist-fold tessellations. A Python (FastAPI) backend owns all the geometry math; a Node
-(Vite + React + Three.js) frontend renders it.
+A showcase viewer for parametric origami "flasher" patterns — deployable twist-fold
+wraps that collapse a flat square sheet into a compact cube around its central hub cell.
+A Python (FastAPI) backend owns all the geometry math; a Node (Vite + React + Three.js)
+frontend renders it.
 
 ## What it does
 
@@ -13,7 +14,7 @@ twist-fold tessellations. A Python (FastAPI) backend owns all the geometry math;
   (paper folds down), border dark — fading out as the model folds
 - Renders two-sided paper: the top face takes the chosen color, the underside stays plain —
   like real origami paper
-- Ships with 4 curated presets; the default Simple Flasher (8×8) folds from a flat square
+- Ships with 4 curated presets; the default Simple Flasher (7×7) folds from a flat square
   into a cube-proportioned block, and the app opens on the folded form so dragging the
   slider unfolds it
 
