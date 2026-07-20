@@ -17,7 +17,7 @@ const CREASE_COLORS: Record<Theme, Partial<Record<CreaseAssignment, string>>> = 
   dark: {
     mountain: "#5b9bff",
     valley: "#f87171",
-    border: "#e8eaf0",
+    border: "#edecea",
   },
   // facet edges are triangulation artifacts, not creases — never drawn
 };

@@ -15,10 +15,10 @@ const STROKES: Record<Theme, Record<CreaseAssignment, { color: string; width: nu
     facet: { color: "#dde1e7", width: 0.025 },
   },
   dark: {
-    border: { color: "#e8eaf0", width: 0.1 },
+    border: { color: "#edecea", width: 0.1 },
     mountain: { color: "#5b9bff", width: 0.07 },
     valley: { color: "#f87171", width: 0.07 },
-    facet: { color: "#232838", width: 0.025 },
+    facet: { color: "#3a3835", width: 0.025 },
   },
 };
 

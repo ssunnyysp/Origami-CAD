@@ -15,9 +15,14 @@ interface Props {
   theme: Theme;
 }
 
-// Matches index.css's --bg / --line / --accent per theme. Kept as plain JS
-// constants (not read from CSS variables) since Three.js color props need
-// literal values, not custom-property references.
+// Matches index.css's --stage / --stage-line / --accent per theme. Kept as
+// plain JS constants (not read from CSS variables) since Three.js color
+// props need literal values, not custom-property references.
+//
+// In dark mode the background is deliberately much lighter than the rest
+// of the UI chrome (see --stage in index.css) — a mid-grey "photography
+// studio" backdrop, the way product shots are actually lit, so the folded
+// paper reads as a well-lit subject instead of receding into a dark void.
 const SCENE_COLORS: Record<
   Theme,
   { background: string; hemiSky: string; hemiGround: string; cell: string; section: string }
@@ -30,10 +35,10 @@ const SCENE_COLORS: Record<
     section: "#2563eb",
   },
   dark: {
-    background: "#0a0c11",
-    hemiSky: "#8fa6c9",
-    hemiGround: "#0d1016",
-    cell: "#242a38",
+    background: "#55534f",
+    hemiSky: "#e8e4dc",
+    hemiGround: "#3a3835",
+    cell: "#454340",
     section: "#3b82f6",
   },
 };

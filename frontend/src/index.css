@@ -4,16 +4,25 @@
     14px/1.5 "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   --mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
 
-  /* Dark theme (default) — deep neutral navy, not pure black, so surfaces
-     still read as layered rather than flattening into a single void. */
-  --ink: #e8eaf0;
-  --ink-soft: #99a2b3;
-  --ink-faint: #5c6577;
-  --bg: #0a0c11;
-  --pane: #12151d;
-  --pane-elevated: #191d28;
-  --line: #232838;
-  --line-strong: #333a4d;
+  /* Dark theme (default) — true neutral graphite grey, not a blue-tinted
+     navy, with four distinct tiers of lightness so surfaces read as
+     physically stacked (page < panel < elevated control) rather than one
+     flat wash. --stage is deliberately much lighter than the other three:
+     it's the backdrop the 3D model and 2D crease pattern sit on, styled
+     like a photography-studio backdrop (a mid grey, the way product shots
+     are actually lit) so the model reads as the well-lit subject instead
+     of receding into a dark void — the surrounding chrome (panel, header)
+     stays dark so it doesn't compete with it. */
+  --ink: #edecea;
+  --ink-soft: #a6a4a1;
+  --ink-faint: #706e6b;
+  --bg: #19181a;
+  --pane: #201f21;
+  --pane-elevated: #2a2929;
+  --line: #383736;
+  --line-strong: #4b4a48;
+  --stage: #55534f;
+  --stage-line: #454340;
 
   --accent: #3b82f6;
   --accent-hover: #60a5fa;
@@ -28,6 +37,14 @@
   --shadow-md: 0 12px 32px rgba(0, 0, 0, 0.5);
   --radius: 8px;
   --radius-sm: 6px;
+
+  /* Paper grain: a low-alpha turbulence texture layered under everything
+     (surfaces set it as a second background-image), so panels and the
+     model's backdrop read as paper stock rather than flat digital color —
+     consistent with this being an origami-folding tool. Subtle by design:
+     it should disappear at a glance and only register as "texture" up
+     close, never compete with text legibility. */
+  --noise: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='140' height='140'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix type='matrix' values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 0.05 0'/></filter><rect width='140' height='140' filter='url(%23n)'/></svg>");
 
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
   --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
@@ -46,6 +63,8 @@
   --pane-elevated: #f8f9fb;
   --line: #e3e6eb;
   --line-strong: #cbd0d9;
+  --stage: #eef0f4;
+  --stage-line: #aab1bd;
 
   --accent: #2563eb;
   --accent-hover: #1d4ed8;
@@ -74,6 +93,7 @@ body,
 
 body {
   background-color: var(--bg);
+  background-image: var(--noise);
   transition:
     background-color var(--t-base) ease,
     color var(--t-base) ease;
@@ -94,6 +114,19 @@ body {
   min-height: 0;
 }
 
+/* Grain over the WebGL canvas itself: the Three.js scene paints its own
+   pixels, so this is a transparent overlay rather than a background-image
+   on the container. pointer-events: none so it never intercepts orbit
+   drags or clicks meant for the 3-D view underneath. */
+.canvas-area::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: var(--noise);
+  pointer-events: none;
+  z-index: 1;
+}
+
 /* --- Task pane ---------------------------------------------------------- */
 
 .task-pane {
@@ -102,6 +135,7 @@ body {
   height: 100%;
   padding: 20px 22px;
   background-color: var(--pane);
+  background-image: var(--noise);
   box-shadow: -1px 0 0 var(--line);
   display: flex;
   flex-direction: column;
@@ -714,7 +748,11 @@ input[type="color"]::-webkit-color-swatch {
 .pattern-view {
   position: absolute;
   inset: 0;
-  background-color: var(--bg);
+  /* --stage, not --bg: the same lighter "studio backdrop" tone the 3D
+     model sits on (see the --stage definition), so switching between the
+     3D and crease-pattern views doesn't change how the sheet is lit. */
+  background-color: var(--stage);
+  background-image: var(--noise);
   display: flex;
   align-items: center;
   justify-content: center;
