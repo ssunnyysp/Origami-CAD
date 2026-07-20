@@ -33,7 +33,12 @@ export function FlasherModel({ geometry, foldness, color, roughness, metalness }
         roughness={roughness}
         metalness={metalness}
       />
-      <CreaseLines pattern={geometry.pattern} positions={positions} foldness={foldness} />
+      <CreaseLines
+        pattern={geometry.pattern}
+        positions={positions}
+        foldness={foldness}
+        paperColor={color}
+      />
     </>
   );
 }
