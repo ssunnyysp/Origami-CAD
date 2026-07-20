@@ -12,7 +12,7 @@ interface Props {
 
 // The back of the sheet is always plain paper — origami paper is colored on
 // one side only, and the two-tone folds are part of the look.
-const PLAIN_PAPER = "#f6f1e6";
+const PLAIN_PAPER = "#eef0f3";
 
 // One non-indexed geometry for the whole sheet, rebuilt from the solver's
 // vertex positions. Non-indexed so normals stay per-face (flat shading),

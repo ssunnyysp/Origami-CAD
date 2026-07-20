@@ -2,11 +2,13 @@ import { useEffect, useMemo } from "react";
 import * as THREE from "three";
 import type { CreasePattern, CreaseAssignment } from "../../model/types";
 
-// Mountain folds up (blue), valley folds down (red).
+// Mountain folds up (blue, matches the app's accent color), valley folds
+// down (red, matches the app's error color) — same semantic pair used
+// throughout the UI.
 const CREASE_COLORS: Partial<Record<CreaseAssignment, string>> = {
-  mountain: "#3560d8",
-  valley: "#d84035",
-  border: "#222222",
+  mountain: "#2563eb",
+  valley: "#dc2626",
+  border: "#0b0e14",
   // facet edges are triangulation artifacts, not creases — never drawn
 };
 
@@ -18,7 +20,7 @@ const CREASE_COLORS: Partial<Record<CreaseAssignment, string>> = {
 const FALLBACK_CREASE_COLORS: Partial<Record<CreaseAssignment, string>> = {
   mountain: "#e0a526",
   valley: "#b0289e",
-  border: "#222222",
+  border: "#0b0e14",
 };
 
 function hexToRgb(hex: string): [number, number, number] {

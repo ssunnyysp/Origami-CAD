@@ -40,13 +40,13 @@ export function Scene({ geometry, foldness, color, roughness, metalness }: Props
       camera={{ position: [0, -cameraDistance * 0.7, cameraDistance * 0.7], fov: 45 }}
       onCreated={({ camera }) => camera.lookAt(0, 0, 0)}
     >
-      {/* Matches the page's warm paper background (see index.css --paper). */}
-      <color attach="background" args={["#eceadf"]} />
+      {/* Matches the page's neutral background (see index.css --bg). */}
+      <color attach="background" args={["#eef0f4"]} />
       {/* Static model — the user orbits manually; no auto-rotation. */}
       <OrbitControls />
       {/* Local lights only — a CDN-fetched Environment map suspends the whole
           scene (blank canvas) whenever the network is slow or offline. */}
-      <hemisphereLight args={["#ffffff", "#d8d2c4", 0.8]} />
+      <hemisphereLight args={["#ffffff", "#c7cdd8", 0.8]} />
       <directionalLight position={[5, -6, 8]} intensity={1.5} />
       <directionalLight position={[-6, 4, 3]} intensity={0.5} />
       <ambientLight intensity={0.4} />
@@ -61,10 +61,10 @@ export function Scene({ geometry, foldness, color, roughness, metalness }: Props
         args={[80, 80]}
         cellSize={2}
         cellThickness={0.9}
-        cellColor="#a89e88"
+        cellColor="#aab1bd"
         sectionSize={10}
         sectionThickness={1.3}
-        sectionColor="#b8794f"
+        sectionColor="#2563eb"
         fadeDistance={48}
         fadeStrength={1}
         infiniteGrid

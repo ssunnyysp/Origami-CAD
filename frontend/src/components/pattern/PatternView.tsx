@@ -4,10 +4,10 @@ import type { CreaseAssignment, FlasherGeometry } from "../../model/types";
 // Mountain folds up (blue), valley folds down (red) — same convention as the
 // 3D crease overlay. Facet edges are drawn faintly as the construction grid.
 const STROKES: Record<CreaseAssignment, { color: string; width: number }> = {
-  border: { color: "#2b2926", width: 0.1 },
-  mountain: { color: "#3560d8", width: 0.07 },
-  valley: { color: "#d84035", width: 0.07 },
-  facet: { color: "#e2ddd0", width: 0.025 },
+  border: { color: "#0b0e14", width: 0.1 },
+  mountain: { color: "#2563eb", width: 0.07 },
+  valley: { color: "#dc2626", width: 0.07 },
+  facet: { color: "#dde1e7", width: 0.025 },
 };
 
 const DRAW_ORDER: CreaseAssignment[] = ["facet", "mountain", "valley", "border"];
@@ -54,10 +54,10 @@ export function PatternView({ geometry }: { geometry: FlasherGeometry | null }) 
       </svg>
       <div className="pattern-legend">
         <span>
-          <i style={{ background: "#3560d8" }} /> mountain
+          <i style={{ background: "#2563eb" }} /> mountain
         </span>
         <span>
-          <i style={{ background: "#d84035" }} /> valley
+          <i style={{ background: "#dc2626" }} /> valley
         </span>
       </div>
     </div>

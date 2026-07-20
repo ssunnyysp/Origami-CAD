@@ -4,6 +4,20 @@ import { exportFold } from "../../api/client";
 import { interpolatePositions } from "../../model/interpolate";
 import { useAppStore } from "../../store/useAppStore";
 
+function UploadIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <path
+        d="M8 10.5V2.5M8 2.5 4.75 5.75M8 2.5l3.25 3.25M3 11v1.5A1.5 1.5 0 0 0 4.5 14h7a1.5 1.5 0 0 0 1.5-1.5V11"
+        stroke="currentColor"
+        strokeWidth="1.4"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
 function downloadJson(data: unknown, filename: string) {
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
   const url = URL.createObjectURL(blob);
@@ -92,7 +106,7 @@ export function FoldImportExport({ geometry }: Props) {
           onChange={(e) => handleFiles(e.target.files)}
         />
         <span className="fold-dropzone-icon" aria-hidden="true">
-          ⌁
+          <UploadIcon />
         </span>
         <span className="fold-dropzone-text">
           {importing ? (

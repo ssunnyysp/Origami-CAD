@@ -5,6 +5,34 @@ import { Scene } from "../scene/Scene";
 import { ControlPanel } from "../ui/ControlPanel";
 import { PatternView } from "../pattern/PatternView";
 
+function ChevronLeftIcon() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 15 15" fill="none" aria-hidden="true">
+      <path
+        d="M9.5 3.5 5 7.5l4.5 4"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function ChevronRightIcon() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 15 15" fill="none" aria-hidden="true">
+      <path
+        d="M5.5 3.5 10 7.5l-4.5 4"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
 export function AppLayout() {
   const ready = useAppStore((s) => s.ready);
   const loadPresets = useAppStore((s) => s.loadPresets);
@@ -58,7 +86,7 @@ export function AppLayout() {
             aria-label="Open panel"
             title="Open panel"
           >
-            ⟨
+            <ChevronLeftIcon />
           </button>
         )}
       </div>
@@ -75,7 +103,7 @@ export function AppLayout() {
               aria-label="Collapse panel"
               title="Collapse panel"
             >
-              ⟩
+              <ChevronRightIcon />
             </button>
           </div>
           <ControlPanel geometry={geometry} />
