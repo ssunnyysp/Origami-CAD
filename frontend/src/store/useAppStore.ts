@@ -2,6 +2,19 @@ import { create } from "zustand";
 import type { FlasherPreset, FoldFrameInfo, FoldImportResponse } from "../model/types";
 import { fetchPresets, importFold } from "../api/client";
 
+export type Theme = "dark" | "light";
+
+const THEME_STORAGE_KEY = "origami-cad-theme";
+
+// Dark is the app's default look (see index.css) regardless of OS
+// preference — a user who hasn't chosen yet gets the intended default, but
+// an explicit choice always wins on return visits.
+function loadStoredTheme(): Theme {
+  if (typeof window === "undefined") return "dark";
+  const stored = window.localStorage.getItem(THEME_STORAGE_KEY);
+  return stored === "light" ? "light" : "dark";
+}
+
 // Structural parameters (sides, rings, angles, radii, material response)
 // come entirely from the selected preset — the UI exposes only model choice,
 // foldness, animation, and paper color. Presets live on the Python backend;
@@ -13,6 +26,7 @@ interface AppState {
   foldness: number;
   animating: boolean;
   viewMode: "3d" | "pattern";
+  theme: Theme;
   paperColor: string;
   roughness: number;
   metalness: number;
@@ -37,6 +51,7 @@ interface AppState {
   setAnimating: (v: boolean) => void;
   setPaperColor: (c: string) => void;
   setViewMode: (m: "3d" | "pattern") => void;
+  toggleTheme: () => void;
   selectPreset: (id: string) => void;
   importFoldFile: (file: File) => Promise<void>;
   selectImportedFrame: (frameIndex: number) => Promise<void>;
@@ -64,6 +79,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   foldness: 0,
   animating: false,
   viewMode: "3d",
+  theme: loadStoredTheme(),
   paperColor: "#d97757",
   roughness: 0.8,
   metalness: 0.02,
@@ -89,6 +105,12 @@ export const useAppStore = create<AppState>((set, get) => ({
   setAnimating: (v) => set({ animating: v }),
   setPaperColor: (c) => set({ paperColor: c }),
   setViewMode: (m) => set({ viewMode: m, animating: false }),
+  toggleTheme: () =>
+    set((state) => {
+      const theme: Theme = state.theme === "dark" ? "light" : "dark";
+      window.localStorage.setItem(THEME_STORAGE_KEY, theme);
+      return { theme };
+    }),
   selectPreset: (id) => {
     const preset = get().presets.find((p) => p.id === id);
     if (!preset) return;
