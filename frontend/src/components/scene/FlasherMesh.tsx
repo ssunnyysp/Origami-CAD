@@ -67,6 +67,8 @@ export function FlasherMesh({ pattern, positions, color, roughness, metalness }:
       }),
     [],
   );
+  useEffect(() => () => frontMaterial.dispose(), [frontMaterial]);
+  useEffect(() => () => backMaterial.dispose(), [backMaterial]);
   frontMaterial.color.set(color);
   frontMaterial.roughness = roughness;
   frontMaterial.metalness = metalness;

@@ -89,7 +89,7 @@ export function AppLayout() {
   const params = { gridDivisions, layerGapRatio, heightRatio };
   // Either the generated preset's geometry or an imported FOLD file's,
   // depending on store.patternSource — see api/useActiveGeometry.ts.
-  const geometry = useActiveGeometry(params);
+  const { geometry, error: geometryError } = useActiveGeometry(params);
 
   return (
     <div className="app-layout">
@@ -115,10 +115,18 @@ export function AppLayout() {
         )}
         {/* First-load and slow-import feedback — without this the canvas
             just looked empty while a fetch was in flight. */}
-        {ready && !geometry && (
+        {ready && !geometry && !geometryError && (
           <div className="loading-pill">
             <span className="loading-spinner" />
             Solving fold…
+          </div>
+        )}
+        {/* A failed geometry fetch (backend unreachable, etc.) used to leave
+            the "Solving fold…" spinner up forever with no indication
+            anything was wrong — surface it instead. */}
+        {ready && geometryError && (
+          <div className="loading-pill loading-pill--error">
+            {geometryError}
           </div>
         )}
         {!paneOpen && (

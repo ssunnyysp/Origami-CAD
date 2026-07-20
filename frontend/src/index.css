@@ -737,6 +737,14 @@ input[type="color"]::-webkit-color-swatch {
   animation: spin 0.7s linear infinite;
 }
 
+.loading-pill--error {
+  max-width: min(420px, calc(100% - 40px));
+  color: var(--error);
+  border-color: color-mix(in srgb, var(--error) 40%, var(--line));
+  text-align: center;
+  animation: fadeScaleIn var(--t-base) var(--ease-out) both;
+}
+
 @keyframes spin {
   to {
     transform: rotate(360deg);
