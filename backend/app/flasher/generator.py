@@ -1,65 +1,57 @@
-"""Square flasher crease-pattern generator (Shafer's square-grid flasher; same
-family as Lang & Zirbel's deployable-array flashers, specialized to a square
-sheet on a unit grid).
+"""Square WRAP-PINWHEEL flasher crease-pattern generator.
 
 A square sheet on an N×N unit-cell grid where N (`grid_divisions`) is ODD.
 Odd N gives the sheet a single, well-defined CENTRAL CELL — the hub the rest
 of the sheet wraps around: with N cells indexed 0..N-1, the middle index
 h = (N-1)/2 is only an integer when N is odd.
 
-The folded ("stowed") state that defines the pattern is a WRAP: the hub cell
-stays flat while every other part of the sheet stands up into vertical wall
-pleats one grid unit tall wrapped around the hub's perimeter — the whole
-sheet collapses toward a ~1×1×1 cube. This is NOT concentric rings (the
-mistake a previous version of this generator made — concentric rings with a
-small chiral trim can only dome, because nothing in that pattern converts
-circumferential sheet length into wall height).
+THE PATTERN (this is the hand-authored design the project's author folds in
+real life, not a procedural ring pattern — an earlier version of this module
+generated concentric ring/arm-ladder creases and is preserved only in git
+history). The sheet is quartered into four congruent RECTANGULAR regions
+arranged as a C4 pinwheel about the hub:
 
-The crease set and every fold's target dihedral below were pinned down by an
-ANALYTIC LOOP-CLOSURE ORACLE (fold every face by its exact target angle
-along a spanning tree from the hub; a correct pattern makes every vertex's
-position agree across all its faces to machine precision, and this one
-closes exactly, collapsing to a 1x1x1 box for n=3,5,7). Families, in
-hub-centered coordinates, ring bands k=1..m outward, NE-canonical prototypes
-(the other three arms/corners are 90° rotations — the pattern is C4,
-chirality CCW):
+    +---------+-------+
+    |    R1   |       |          hub = the single center cell (stays flat)
+    |  (NW)   |  R2   |          R1: cx 0..h-1,  cy h..N-1
+    +-----+---+ (NE)  |          R2: cx h..N-1,  cy h+1..N-1
+    |     |hub+-------+          R3: cx h+1..N-1, cy 0..h
+    | R4  +---+   R3  |          R4: cx 0..h,    cy 0..h-1
+    | (SW)|       (SE)|          (each is h×(h+1); they tile the sheet minus
+    +-----+-----------+           the hub, with 90° rotational symmetry)
 
-- HUB boundary: mountain, target 90° (the wall folds down from the flat
-  hub).
-- RING lines (full grid squares at half-integer radii, rl>=2): the
-  accordion ridges/troughs, alternating mountain/valley outward, target
-  180° — EXCEPT the four "jog" segments where a ring line crosses an
-  arm-ladder cell: there the fold has the OPPOSITE gender (the accordion
-  phase shifts by one ring across the arm — the signature pinwheel jog of
-  every real flasher CP).
-- RADIAL grid segments (perpendicular to the near sheet edge): azimuthal
-  pleat folds, target 180°, gender alternating with band parity (mountain
-  in odd bands). This family is why Shafer's instructions begin "crease an
-  N×N grid with every crease both mountained and valleyed".
-- RING-CORNER cells (h±k, h±k): one 45° diagonal each, through the cell's
-  hub-side corner (main diagonal on the NE/SW corners, anti on NW/SE — the
-  pinwheel), target 180°; the cell's ENTERING side edge (south, on the NE
-  corner) is a valley at 180° and its EXITING side edge (west, on the NE
-  corner) folds only 90° — one of the four true corner bends of the wrap.
-- ARM-LADDER cells (NE arm at (h+1, h+k), k=2..m, stepping one cell per
-  ring): NO diagonal crease — the arm is a stepped polyline of edge folds:
-  west edge 90° (bend), east edge valley 180°, and the jog segments
-  described under RING. At k=1 the arm coincides with the corner cell.
+Only the NW region's creases are written out as a prototype; the other three
+are exact 90° rotations of it (see `rot_seg` / `set_cell4`). Within each
+region:
 
-Only the 90° folds (hub boundary, corner-exit edges, arm-west edges — the
-vertical corner bends of the wrapped box) use fold factor 0.5; every other
-crease is a 180°-class pleat (factor 1.0). At mid-fold the bends sit near
-45-60° and the pleats near 90-120°: the wrapped-cube state; the exact-180°
-endpoint is the pressed-flat stow limit.
+- DIAGONAL: a single 45° crease runs from just off the hub corner out toward
+  the sheet corner, h cells long (cells (h-1-k, h+k) for k=0..h-1 in the NW
+  region). It splits the region into a hub-side triangle and an outer
+  triangle. The rotation makes the four diagonals a pinwheel.
+- ACCORDION PLEATS fill the HUB-SIDE triangle as a staircase of horizontal
+  and vertical grid folds, gender alternating mountain/valley with taxicab
+  distance from the hub (mountain nearest the hub). These are the folds that
+  compress as the sheet stows.
+- The OUTER triangle (beyond the diagonal) carries NO creases — it stays a
+  flat facet flap that WRAPS around the hub as the accordion compresses.
+  This is the "wraps around the hub instead of crumpling" behavior.
+- HUB boundary: the four edges of the hub cell fold ~90° (the walls stand up
+  from the flat hub).
 
-Every cell is split into 4 triangles by an X through its center so the mesh
-can flex; only the corner-cell halves listed above are real creases, the
-rest are "facet" edges (never drawn).
+Fold factors: the hub-boundary bends use 0.5 (→ ~90° at stow); every marked
+pleat and diagonal is a 180°-class fold (factor 1.0). Every cell is split
+into 4 triangles by an X through its center so the mesh can flex; only the
+marked halves/edges above are real creases, the rest are "facet" edges.
 
-Lang (J. Mechanisms Robotics, 2016) proves an intact flasher sheet is not a
-rigid single-DOF mechanism — real paper flashers work because facets flex
-slightly. The solver here is exactly that kind of soft, crease-angle-driven
-model, so the intact sheet folds the way real paper does.
+Unlike the earlier ring pattern, this pinwheel does NOT rigidly close to an
+exact 1×1×1 box (a 45° diagonal cannot span the non-square h×(h+1) region
+corner-to-corner, so a rigid loop-closure oracle leaves a small residual).
+That is fine and expected: Lang (J. Mechanisms Robotics, 2016) proves an
+intact flasher sheet is not a rigid single-DOF mechanism — real paper
+flashers work because the facets flex. The solver here is exactly that kind
+of soft, crease-angle-driven model, so the intact sheet wraps the way real
+paper does; small grids (7×7) wrap cleanly, the larger presets wrap less
+tightly within the solver's time budget.
 """
 
 from __future__ import annotations
@@ -71,38 +63,6 @@ from dataclasses import dataclass, field
 # regardless of grid_divisions.
 HUB_CENTER = (0.0, 0.0)
 HUB_HALF = 0.5
-
-
-def ring_line_gender(rl: int) -> str:
-    """Mountain/valley of ring LINE rl (rl=1 is the hub boundary, counting
-    outward). The hub boundary is a mountain (the wall folds down from the
-    flat hub); each successive ring line alternates (ridge, trough, ...).
-    """
-    return "mountain" if rl % 2 == 1 else "valley"
-
-
-def band_radial_gender(k: int) -> str:
-    """Gender of the radial pleat folds in ring band k (band 1 touches the
-    hub); alternates because the sheet's colored side faces outward on odd
-    bands and inward on even ones."""
-    return "mountain" if k % 2 == 1 else "valley"
-
-
-def band_diagonal_gender(k: int) -> str:
-    """Gender of the ring-corner 45° diagonal in band k."""
-    if _DIAG_CORNER_ODD == "mountain":
-        return "mountain" if k % 2 == 1 else "valley"
-    return "valley" if k % 2 == 1 else "mountain"
-
-
-def _opposite(g: str) -> str:
-    return "valley" if g == "mountain" else "mountain"
-
-
-# The stow-state closure is invariant to the corner-diagonal gender phase
-# (the layers coincide either way); the phase below is the one measured to
-# fold most cleanly mid-sweep (strain / ring-rotation sync).
-_DIAG_CORNER_ODD = "mountain"
 
 
 @dataclass(frozen=True)
@@ -156,90 +116,84 @@ def generate_flasher(params: FlasherParams) -> CreasePattern:
             "hub cell (an even count splits the center between four cells)"
         )
     h = (n - 1) // 2  # index of the hub cell (both x and y)
-    m = h  # number of ring bands between the hub and the sheet edge
+    m = h  # rings out from the hub to the sheet edge (kept as CreasePattern.ring_count)
     center = n / 2.0  # sheet's true center, in 0..n index coordinates
-
-    def rot_ccw(pt: tuple[int, int]) -> tuple[int, int]:
-        return (n - pt[1], pt[0])
 
     def seg_key(p: tuple[int, int], q: tuple[int, int]):
         return (p, q) if p <= q else (q, p)
 
-    # --- special segments (NE prototypes, rotated 4x) -----------------------
-    special: dict = {}
+    # --- WRAP PINWHEEL pattern (user-authored, see module docstring) --------
+    # The sheet is quartered into four congruent rectangular regions arranged
+    # as a pinwheel about the hub. Each region is split by a single 45°
+    # diagonal running from just off the hub corner out to just short of the
+    # sheet corner; the HUB-SIDE triangle of that split is packed with an
+    # accordion of horizontal/vertical grid pleats (a triangular staircase),
+    # while the OUTER triangle stays a facet flap that wraps around the hub as
+    # the accordion compresses. The whole thing is C4: only the NW region's
+    # prototype is written out, then rotated 90° three times (segments and
+    # cells alike) so the four regions match exactly.
 
-    def add_rot4(p: tuple[int, int], q: tuple[int, int], gender: str, factor: float) -> None:
+    def rot_seg(t: str, x: int, y: int) -> tuple[str, int, int]:
+        # 90° CCW image (endpoints map (x, y) -> (n - y, x)) of a unit grid
+        # segment keyed by ("H"|"V", min-x, min-y): an H run maps to a V run.
+        return ("V", n - y, x) if t == "H" else ("H", n - y - 1, x)
+
+    # Accordion pleat lines of the NW region's hub-side triangle, mirrored x4.
+    foldlines: dict[tuple[str, int, int], str] = {}
+
+    def set_seg4(t: str, x: int, y: int, gender: str) -> None:
+        seg = (t, x, y)
         for _ in range(4):
-            special[seg_key(p, q)] = (gender, factor)
-            p, q = rot_ccw(p), rot_ccw(q)
+            foldlines[seg] = gender
+            seg = rot_seg(*seg)
 
-    for k in range(1, m + 1):
-        # NE ring-corner cell (h+k, h+k): side-edge folds, verified by the
-        # loop-closure oracle. Band 1 (the arm-fused corner): entering
-        # (south) edge is a 180° valley pleat, exiting (west) edge a 90°
-        # bend. Interior corners (2 <= k < m): BOTH side edges are 180°
-        # valley pleats. The terminal corner (k = m) ends the sheet with a
-        # matched pair of 90° bends — the outermost flap wraps a quarter
-        # turn instead of tucking flat (like Lang's choice of terminating a
-        # flasher along bend folds). (For m = 2 the terminal corner abuts
-        # the arm cell and must keep the interior 180° form.)
-        if k == 1:
-            c_s, c_w = ("valley", 1.0), (band_radial_gender(1), 0.5)
-        elif k < m or m == 2:
-            c_s, c_w = ("valley", 1.0), ("valley", 1.0)
-        else:
-            c_s, c_w = ("mountain", 0.5), ("valley", 0.5)
-        add_rot4((h + k, h + k), (h + k + 1, h + k), *c_s)
-        add_rot4((h + k, h + k), (h + k, h + k + 1), *c_w)
-    for k in range(2, m + 1):
-        # NE arm-ladder cell (h+1, h+k): west edge is a 90° bend, east edge a
-        # 180° valley pleat (written after the corner entries so it wins the
-        # shared segment at k=2 where arm and corner cells are adjacent), and
-        # the jogs (south/north edges) fold OPPOSITE to their ring line.
-        add_rot4((h + 1, h + k), (h + 1, h + k + 1), band_radial_gender(k), 0.5)
-        add_rot4((h + 2, h + k), (h + 2, h + k + 1), "valley", 1.0)
-        add_rot4((h + 1, h + k), (h + 2, h + k), _opposite(ring_line_gender(k)), 1.0)
-        add_rot4((h + 1, h + k + 1), (h + 2, h + k + 1), _opposite(ring_line_gender(k + 1)), 1.0)
+    for ry in range(h):  # horizontal pleats: row h+ry, columns 0..h-1-ry
+        g = "mountain" if ry % 2 == 0 else "valley"
+        for x in range(0, h - ry):
+            set_seg4("H", x, h + ry, g)
+    for rx in range(h):  # vertical pleats: column h-rx, rows h+rx..n-2
+        g = "mountain" if rx % 2 == 0 else "valley"
+        for y in range(h + rx, n - 1):
+            set_seg4("V", h - rx, y, g)
+
+    # The four region diagonals: NW region's anti-diagonal cells, mirrored x4
+    # (a 90° cell rotation flips main<->anti, giving the pinwheel chirality).
+    diag_cells: dict[tuple[int, int], tuple[str, str]] = {}
+
+    def set_cell4(cx: int, cy: int, which: str, gender: str) -> None:
+        for _ in range(4):
+            diag_cells[(cx, cy)] = (which, gender)
+            cx, cy, which = n - cy - 1, cx, ("main" if which == "anti" else "anti")
+
+    for k in range(h):  # NW diagonal cells (h-1-k, h+k), out from the hub
+        set_cell4(h - 1 - k, h + k, "anti", "mountain")
+
+    hub_edges = {
+        seg_key((h, h), (h + 1, h)),
+        seg_key((h, h + 1), (h + 1, h + 1)),
+        seg_key((h, h), (h, h + 1)),
+        seg_key((h + 1, h), (h + 1, h + 1)),
+    }
 
     def grid_segment_assignment(
         p: tuple[int, int], q: tuple[int, int]
     ) -> tuple[str, float]:
         """Classify the unit grid segment p-q (axis-aligned, |p-q|=1).
 
-        Sheet borders are borders; otherwise EVERY grid segment is a crease:
-        the special corner/arm segments above, else a ring pleat if the
-        segment runs parallel to the near sheet edge (its grid line farther
-        from the hub than its position along it), else a radial pleat.
+        Sheet edge -> border; the four hub-cell edges -> 90° wall bends; a
+        marked accordion pleat -> full 180° fold of its gender; everything
+        else (the outer wrap flaps) -> uncreased facet.
         """
         (x1, y1), (x2, y2) = p, q
         if (x1 in (0, n) and x2 in (0, n)) or (y1 in (0, n) and y2 in (0, n)):
             return ("border", 1.0)
-        hit = special.get(seg_key(p, q))
-        if hit is not None:
-            return hit
-        # Hub-centered distances: grid line index g sits at |g - h - 0.5|
-        # (a half-integer), the midpoint along the segment at an integer.
-        if y1 == y2:  # horizontal segment
-            line_d = abs(y1 - (h + 0.5))
-            mid_d = abs(min(x1, x2) + 0.5 - (h + 0.5))
-        else:  # vertical segment
-            line_d = abs(x1 - (h + 0.5))
-            mid_d = abs(min(y1, y2) + 0.5 - (h + 0.5))
-        if line_d > mid_d:
-            rl = int(line_d + 0.5)  # ring line index; rl=1 is the hub edge
-            if rl == 1:
-                return ("mountain", 0.5)  # hub boundary: 90° wall bend
-            return (ring_line_gender(rl), 1.0)
-        return (band_radial_gender(int(mid_d)), 1.0)
-
-    # --- diagonal cells: ring corners only, pinwheel orientation ------------
-    diag_cells: dict[tuple[int, int], tuple[str, str]] = {}
-    for k in range(1, m + 1):
-        g = band_diagonal_gender(k)
-        diag_cells[(h + k, h + k)] = ("main", g)  # NE
-        diag_cells[(h - k, h - k)] = ("main", g)  # SW
-        diag_cells[(h - k, h + k)] = ("anti", g)  # NW
-        diag_cells[(h + k, h - k)] = ("anti", g)  # SE
+        if seg_key(p, q) in hub_edges:
+            return ("mountain", 0.5)  # hub boundary: 90° wall bend
+        seg = ("H", min(x1, x2), y1) if y1 == y2 else ("V", x1, min(y1, y2))
+        gender = foldlines.get(seg)
+        if gender is None:
+            return ("facet", 1.0)
+        return (gender, 1.0)
 
     # --- mesh --------------------------------------------------------------
     # Index coordinates run 0..n for the mesh arrays; output positions are
