@@ -117,7 +117,21 @@ RELAX_SUBSTEPS_PER_RING = 100 / 3  # relaxation substeps per frame, scaled by
 # largest preset (31x31, 15 rings) take minutes instead of seconds for
 # diminishing convergence return; the cap trades some residual strain on
 # the biggest presets for a solve that finishes in a reasonable time.
-LENGTH_ITERS_PER_RING = 25 / 3
+LENGTH_ITERS_PER_RING = 25 / 6  # halved from 25/3: on the wrap-pinwheel
+# pattern (which does not rigidly close — see generator.py's module
+# docstring — real paper flexes to fold it, this solver's rigid triangles
+# don't), _project_lengths ran ~16 correction passes per single dihedral-
+# force kick every substep. That 16:1 imbalance let length correction win
+# tugs-of-war it shouldn't: measured directly, it silently flips a crease's
+# effective fold direction across the mountain/valley (±180°) divide for a
+# meaningful fraction of hinges, since the wrapped angle error always takes
+# the *locally shortest* path back toward the target — which for a hinge
+# already pushed to the wrong side of ±180° is the path that drives it
+# FURTHER wrong, not back. Halving length correction's relative pull (still
+# capped by MAX_LENGTH_ITERS below, so grids at/above ~4 rings are
+# unaffected either way) measurably improves mountain/valley fidelity on the
+# default 7×7 preset (rings=3, the one grid size this constant actually
+# changes) with only a small strain cost.
 MAX_RELAX_SUBSTEPS = 90
 MAX_LENGTH_ITERS = 16
 LENGTH_RELAX = 0.9

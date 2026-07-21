@@ -151,9 +151,12 @@ def generate_flasher(params: FlasherParams) -> CreasePattern:
         g = "mountain" if ry % 2 == 0 else "valley"
         for x in range(0, h - ry):
             set_seg4("H", x, h + ry, g)
-    for rx in range(h):  # vertical pleats: column h-rx, rows h+rx..n-2
+    for rx in range(h):  # vertical pleats: column h-rx, rows h+rx..n-1 (run
+        # all the way to the sheet's own edge at y=n — not n-1 — so the
+        # crease terminates at the paper's border instead of stopping one
+        # unit short of it with nothing there to explain the abrupt end)
         g = "mountain" if rx % 2 == 0 else "valley"
-        for y in range(h + rx, n - 1):
+        for y in range(h + rx, n):
             set_seg4("V", h - rx, y, g)
 
     # The four region diagonals: NW region's anti-diagonal cells, mirrored x4
