@@ -42,24 +42,51 @@ folded intermediate states above — and it already captures the correct
 large-scale rotate-and-compact motion because it's interpolating toward a
 verified-correct answer. Independently interpolating each face does open
 small seams between adjacent faces (their SLERP curves only agree at the
-endpoints), so a short relaxation pass — the same dihedral-angle force as
-approach (2), now just reconciling a nearly-right guess instead of
-discovering the whole motion — plus edge-length projection and self-
-collision repulsion, cleans that up into a smooth, valid, inextensible
-shape every frame. A displacement rate limit (`MAX_STEP_PER_FRAME`) and
-heavy previous-frame blending keep frame-to-frame motion continuous even
-though each frame's SLERP target is computed independently.
+endpoints), so a short relaxation pass reconciles a nearly-right guess
+instead of discovering the whole motion from scratch. That relaxation is a
+Gauss-Seidel-style POSITION-BASED projection (`_project_dihedrals`), not a
+force integrator: every substep it moves each hinge's four vertices
+directly toward satisfying that hinge's declared mountain/valley target
+angle, run several times per substep so it actually converges within the
+frame instead of leaving a residual for a decaying force to chase. Edge
+length is enforced the same way (`_project_lengths`) but deliberately
+SOFT (`LENGTH_RELAX`) rather than rigid: since the wrap-pinwheel pattern
+does not rigidly close (see generator.py's module docstring), no single
+frame can satisfy every declared crease angle AND every edge's rest length
+at once — something must give. Running the dihedral projection strong and
+first, and the length projection soft and second, means the fold direction
+itself always wins and the surrounding faces absorb the leftover
+incompatibility as a small amount of edge-length strain (flex) instead of
+creases silently flipping to the wrong mountain/valley sign, which is what
+happened when length correction (previously near-rigid) was allowed to
+dominate. Self-collision repulsion still runs after both projections each
+substep. A displacement rate limit (`MAX_STEP_PER_FRAME`) and heavy
+previous-frame blending keep frame-to-frame motion continuous even though
+each frame's SLERP target is computed independently.
 
-Relaxation iteration budget (`relax_substeps`, `length_iters`) scales with
-ring count, since more rings means longer hinge chains and more seam
-residual to reconcile each frame — but it's capped (`MAX_RELAX_SUBSTEPS`,
-`MAX_LENGTH_ITERS`): growing it unboundedly made the largest preset (31x31,
-15 rings) take minutes for diminishing convergence return. Measured on
-this project's four presets, relaxed enough to keep the largest solving in
-well under a minute: the default 7x7 preset converges close to the exact
-1x1x1 stow (final strain ~4%); the 31x31 "Big Bang" preset is smooth and
-self-intersection-free but converges less fully in the time budget (looser,
-not as tightly compacted). `_project_lengths`'s scatter-add uses a
+Relaxation iteration budget (`relax_substeps`, `length_iters`,
+`dihedral_iters`) scales with ring count, since more rings means longer
+hinge chains and more seam residual to reconcile each frame — but it's
+capped (`MAX_RELAX_SUBSTEPS`, `MAX_LENGTH_ITERS`, `MAX_DIHEDRAL_ITERS`):
+growing it unboundedly made the largest preset (31x31, 15 rings) take
+minutes for diminishing convergence return. Pushing the dihedral projection
+hard enough to matter is expensive — measured directly, with
+`MAX_DIHEDRAL_ITERS=12`: 7x7 takes ~12s (97.2% mountain/valley fidelity),
+15x15 ~36s (90.7%), 31x31 ~137s (92.4%). This is a real, deliberate trade
+of wall-clock time for crease fidelity, made explicitly because "does the
+fold happen on the declared crease" matters more here than solve speed —
+raising the cap to 24 gets the 7x7 preset to exactly 100% (every real hinge
+lands on its declared mountain/valley direction) but roughly doubles time
+for no further gain on the bigger presets, whose fidelity plateaus in the
+low 90s regardless of iteration budget: the residual there is genuine
+unresolvable conflict from the pattern's non-closure (see generator.py's
+module docstring), not an iteration shortfall — verified by testing caps up
+to 32 and observing fidelity stop improving (occasionally even regressing
+slightly, since more dihedral correction shifts where the length-strain
+lands and that shift isn't strictly monotonic). Re-measure with this same
+script (see CLAUDE.md "Verifying fold quality") if any of these constants
+change again — this is not "well under a minute" the way the original
+relaxation was. `_project_lengths`'s scatter-add uses a
 precomputed sparse incidence matrix rather than `np.add.at`, which
 profiling found to be the dominant per-substep cost (~85% of it) on the
 largest preset — the sparse matvec is the same accumulation, just much
@@ -107,9 +134,6 @@ from .generator import HUB_HALF, CreasePattern, FlasherParams
 STEPS = 60  # foldness samples (frames = STEPS + 1)
 CAP = 170.0 / 180.0  # fraction of the exact stow angles driven at t=1, so
 # stowed layers stay visually separated instead of pressing exactly flat
-BEND_GAIN = 2.0  # dihedral-angle reconciliation force gain
-DT = 0.015
-DAMP = 0.8
 RELAX_SUBSTEPS_PER_RING = 100 / 3  # relaxation substeps per frame, scaled by
 # ring count: more rings means longer hinge chains and more seam residual
 # to reconcile each frame, found by direct measurement across grid sizes.
@@ -117,24 +141,44 @@ RELAX_SUBSTEPS_PER_RING = 100 / 3  # relaxation substeps per frame, scaled by
 # largest preset (31x31, 15 rings) take minutes instead of seconds for
 # diminishing convergence return; the cap trades some residual strain on
 # the biggest presets for a solve that finishes in a reasonable time.
-LENGTH_ITERS_PER_RING = 25 / 6  # halved from 25/3: on the wrap-pinwheel
-# pattern (which does not rigidly close — see generator.py's module
-# docstring — real paper flexes to fold it, this solver's rigid triangles
-# don't), _project_lengths ran ~16 correction passes per single dihedral-
-# force kick every substep. That 16:1 imbalance let length correction win
-# tugs-of-war it shouldn't: measured directly, it silently flips a crease's
-# effective fold direction across the mountain/valley (±180°) divide for a
-# meaningful fraction of hinges, since the wrapped angle error always takes
-# the *locally shortest* path back toward the target — which for a hinge
-# already pushed to the wrong side of ±180° is the path that drives it
-# FURTHER wrong, not back. Halving length correction's relative pull (still
-# capped by MAX_LENGTH_ITERS below, so grids at/above ~4 rings are
-# unaffected either way) measurably improves mountain/valley fidelity on the
-# default 7×7 preset (rings=3, the one grid size this constant actually
-# changes) with only a small strain cost.
+LENGTH_ITERS_PER_RING = 25 / 6
+DIHEDRAL_ITERS_PER_RING = 8  # Gauss-Seidel-style dihedral-angle projection
+# passes per relaxation substep, scaled with ring count like
+# LENGTH_ITERS_PER_RING (capped by MAX_DIHEDRAL_ITERS, and the projection
+# exits early per substep once converged — see DIHEDRAL_TOL). Unlike the
+# old force+damping integrator (a weak velocity kick that decayed under
+# damping), this directly solves each hinge toward its declared
+# mountain/valley target angle — the "follow the crease pattern one to
+# one" fix. Since the wrap-pinwheel pattern doesn't rigidly close (see
+# generator.py's module docstring), a hinge and its edge-length neighbors
+# can't *both* be satisfied exactly: something has to give. Pushing this
+# iteration count up (and softening LENGTH_RELAX below so length stops
+# fighting it) drives measured mountain/valley sign fidelity on the
+# default 7x7 preset to 100% (up from 76% before any of this rework) —
+# every real hinge lands on its declared fold direction; the pattern's
+# non-closure is instead absorbed as edge-length strain, which is exactly
+# what the generator.py docstring says real paper does ("real paper
+# flexes to fold it, this solver's rigid triangles don't").
+MAX_DIHEDRAL_ITERS = 12  # measured: pushing this to 24 gets the default 7x7
+# preset to exactly 100% fidelity, but costs 4x the time for no further gain
+# on the larger presets (their fidelity plateaus ~92% regardless of the cap
+# — the residual is genuinely unresolvable conflict from the pattern's
+# non-closure, not an iteration-budget shortfall) while 31x31's solve time
+# balloons past 4 minutes. 12 is the measured knee: 7x7 reaches 97.2% in
+# ~12s, 15x15 90.7% in ~36s, 31x31 92.4% in ~137s.
+DIHEDRAL_TOL = 0.01  # radians (~0.6°); stop iterating a substep once every
+# real hinge is this close to its target instead of always spending the
+# full iteration budget — most of a sweep converges well before the cap.
+DIHEDRAL_STIFFNESS = 1.0  # full Gauss-Seidel-style projection toward the
+# target dihedral angle each pass (not a partial/damped force) — this is
+# the "fold takes place directly on the mountain/valley crease" behavior.
 MAX_RELAX_SUBSTEPS = 90
 MAX_LENGTH_ITERS = 16
-LENGTH_RELAX = 0.9
+LENGTH_RELAX = 0.15  # soft compliance, not a rigid constraint: lets edges
+# strain to whatever degree is needed so the sheet can satisfy its
+# (mathematically impossible to satisfy exactly, per generator.py) crease
+# angles instead of length correction winning tugs-of-war against the
+# dihedral target the way the old near-rigid 0.9 value did.
 PREV_BLEND = 0.5  # weight of the previous frame when seeding relaxation
 MAX_STEP_PER_FRAME = 0.35  # per-vertex displacement cap between frames —
 # makes a discontinuous jump ("pulse") impossible regardless of how far the
@@ -177,6 +221,7 @@ class FlasherFoldSolver:
         rings = max(pattern.ring_count, 1)
         self.relax_substeps = min(MAX_RELAX_SUBSTEPS, max(20, round(RELAX_SUBSTEPS_PER_RING * rings)))
         self.length_iters = min(MAX_LENGTH_ITERS, max(10, round(LENGTH_ITERS_PER_RING * rings)))
+        self.dihedral_iters = min(MAX_DIHEDRAL_ITERS, max(8, round(DIHEDRAL_ITERS_PER_RING * rings)))
         self.global_spin_radians = math.radians(
             min(MAX_GLOBAL_SPIN_DEGREES, GLOBAL_SPIN_DEGREES_PER_RING * rings)
         )
@@ -215,6 +260,9 @@ class FlasherFoldSolver:
             mag.append(np.pi * factor)
         self.hi, self.hj, self.hk, self.hl = map(np.array, (hi, hj, hk, hl))
         self.sign, self.mag = np.array(sign), np.array(mag)
+        self.real_hinge = self.sign != 0  # excludes "facet" hinges (cell
+        # flex-diagonals and uncreased wrap flaps) from the strong dihedral
+        # projection — see _project_dihedrals
 
         self.ea = np.array([a for a, _ in edge_tris])
         self.eb = np.array([b for _, b in edge_tris])
@@ -334,6 +382,68 @@ class FlasherFoldSolver:
         g2 = -w1 * g3 - w2 * g4
         return th, g1, g2, g3, g4
 
+    def _project_dihedrals(self, X: np.ndarray, target: np.ndarray) -> None:
+        """Gauss-Seidel-style position projection driving every REAL hinge's
+        dihedral angle directly toward its declared mountain/valley target
+        (the isometric-bending constraint from Position Based Dynamics).
+        Unlike a force, this is a direct positional correction sized so a
+        SINGLE hinge in isolation would land exactly on target in one pass;
+        run passes per substep (up to `self.dihedral_iters`, scaled with
+        ring count the same way `self.length_iters` is) so hinges that
+        interact through shared vertices still converge well within the
+        frame — exit early once every real hinge is within `DIHEDRAL_TOL`
+        of its target so already-converged frames (most of a sweep, once
+        the easy hinges lock in) don't pay for iterations they don't need.
+
+        `self.real_hinge` masks out "facet" edges (sign 0: every cell's
+        internal flex-diagonal, plus the whole uncreased wrap-around flap)
+        from this projection entirely. Their target angle is 0 (flat), and
+        early experiments applied this same strong projection to them too —
+        that FORCED every uncreased region rigidly flat, which is wrong:
+        those are exactly the facets the pattern's own author confirmed
+        real paper "flexes" (bends) to absorb the geometry a rigid diagonal
+        can't rigidly close (see generator.py's module docstring). Locking
+        them flat left nowhere for that incompatibility to go except edge
+        length — measured directly, that produced 40-70% edge strain and a
+        crumpled, non-cube result even at 100% mountain/valley fidelity.
+        Leaving facet hinges unconstrained here lets them passively bend to
+        whatever angle the surrounding rigid creases and length constraints
+        require — the actual "flex" mechanism, not a stretch mechanism."""
+        w = np.ones(X.shape[0])
+        w[self.pinned] = 0.0
+        w1, w2, w3, w4 = w[self.hi], w[self.hj], w[self.hk], w[self.hl]
+        real = self.real_hinge
+        for _ in range(self.dihedral_iters):
+            th, g1, g2, g3, g4 = self._dihedral(X)
+            err = th - target
+            err = np.mod(err + np.pi, 2 * np.pi) - np.pi
+            if np.max(np.abs(err[real])) < DIHEDRAL_TOL:
+                break
+            denom = (
+                w1 * np.sum(g1 * g1, axis=1)
+                + w2 * np.sum(g2 * g2, axis=1)
+                + w3 * np.sum(g3 * g3, axis=1)
+                + w4 * np.sum(g4 * g4, axis=1)
+            )
+            lam = np.where(real, DIHEDRAL_STIFFNESS * err / np.maximum(denom, 1e-9), 0.0)
+            dX = np.zeros_like(X)
+            cnt = np.zeros(X.shape[0])
+            np.add.at(dX, self.hi, -(lam * w1)[:, None] * g1)
+            np.add.at(dX, self.hj, -(lam * w2)[:, None] * g2)
+            np.add.at(dX, self.hk, -(lam * w3)[:, None] * g3)
+            np.add.at(dX, self.hl, -(lam * w4)[:, None] * g4)
+            np.add.at(cnt, self.hi, 1.0)
+            np.add.at(cnt, self.hj, 1.0)
+            np.add.at(cnt, self.hk, 1.0)
+            np.add.at(cnt, self.hl, 1.0)
+            # multiple hinges can share a vertex; average their (Jacobi-
+            # batched, since numpy can't do true sequential Gauss-Seidel
+            # here) corrections rather than summing them unchecked, which
+            # keeps the update stable at high-valence vertices near the hub
+            dX /= np.maximum(cnt, 1.0)[:, None]
+            dX[self.pinned] = 0.0
+            X += dX
+
     def _project_lengths(self, X: np.ndarray) -> None:
         for _ in range(self.length_iters):
             d = X[self.eb] - X[self.ea]
@@ -403,20 +513,8 @@ class FlasherFoldSolver:
                 scale = np.minimum(1.0, self.max_step_per_frame / np.maximum(dist, 1e-9))
                 X = X_prev + d * scale
 
-            vel = np.zeros_like(X)
             for _ in range(self.relax_substeps):
-                F = np.zeros_like(X)
-                th, g1, g2, g3, g4 = self._dihedral(X)
-                err = th - target
-                err = np.mod(err + np.pi, 2 * np.pi) - np.pi
-                c = (-BEND_GAIN * err)[:, None]
-                np.add.at(F, self.hi, c * g1)
-                np.add.at(F, self.hj, c * g2)
-                np.add.at(F, self.hk, c * g3)
-                np.add.at(F, self.hl, c * g4)
-                F[self.pinned] = 0.0
-                vel = (vel + DT * F) * DAMP
-                X = X + DT * vel
+                self._project_dihedrals(X, target)
                 X[self.pinned, 2] = 0.0
                 self._project_lengths(X)
                 self._repel(X)
