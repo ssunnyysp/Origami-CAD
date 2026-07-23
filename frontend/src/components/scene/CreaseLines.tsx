@@ -3,19 +3,20 @@ import * as THREE from "three";
 import type { CreasePattern, CreaseAssignment } from "../../model/types";
 import type { Theme } from "../../store/useAppStore";
 
-// Mountain folds up (blue, matches the app's accent color), valley folds
-// down (red, matches the app's error color) — same semantic pair used
-// throughout the UI. Border needs a theme-specific tone: near-black reads
-// fine against light paper but disappears against a dark canvas, so it
-// flips to a pale tone in dark mode.
+// Mountain folds up (yellow), valley folds down (red) — this pair is the
+// project's explicit fold-direction convention: yellow creases fold one
+// way, red the other, uniformly, everywhere (including the diagonal — no
+// crease is a special case). Border needs a theme-specific tone: near-black
+// reads fine against light paper but disappears against a dark canvas, so
+// it flips to a pale tone in dark mode.
 const CREASE_COLORS: Record<Theme, Partial<Record<CreaseAssignment, string>>> = {
   light: {
-    mountain: "#2563eb",
+    mountain: "#ca8a04",
     valley: "#dc2626",
     border: "#0b0e14",
   },
   dark: {
-    mountain: "#5b9bff",
+    mountain: "#facc15",
     valley: "#f87171",
     border: "#edecea",
   },
@@ -23,12 +24,12 @@ const CREASE_COLORS: Record<Theme, Partial<Record<CreaseAssignment, string>>> = 
 };
 
 // Fallback palette used when the user's chosen paper color sits too close
-// to one of the fixed crease colors above (e.g. blue paper would otherwise
-// swallow the blue mountain lines). Amber/magenta sit far from both the
-// default palette and each other in hue, so they stay visible against
-// almost any paper color, in either theme.
+// to one of the fixed crease colors above (e.g. yellow paper would otherwise
+// swallow the yellow mountain lines). Blue/magenta sit far from both the
+// default yellow/red palette and each other in hue, so they stay visible
+// against almost any paper color, in either theme.
 const FALLBACK_CREASE_COLORS: Partial<Record<CreaseAssignment, string>> = {
-  mountain: "#e0a526",
+  mountain: "#2563eb",
   valley: "#b0289e",
 };
 
@@ -55,7 +56,7 @@ interface Props {
   theme: Theme;
 }
 
-// CAD-style overlay: mountain (red) / valley (blue) / border (dark) crease
+// CAD-style overlay: mountain (yellow) / valley (red) / border (dark) crease
 // lines, fading out as the model folds so the stowed form reads as plain
 // paper rather than a wireframe.
 export function CreaseLines({ pattern, positions, foldness, paperColor, theme }: Props) {

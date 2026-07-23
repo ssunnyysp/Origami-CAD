@@ -2,27 +2,29 @@ import { useMemo } from "react";
 import type { CreaseAssignment, FlasherGeometry } from "../../model/types";
 import type { Theme } from "../../store/useAppStore";
 
-// Mountain folds up (blue), valley folds down (red) — same convention as the
-// 3D crease overlay. Facet edges are drawn faintly as the construction grid.
-// Border/facet need theme-specific tones: a near-black border and pale-gray
-// facet grid both read fine on light paper but would go invisible (border)
-// or vanish into noise (facet) against a dark background.
-const STROKES: Record<Theme, Record<CreaseAssignment, { color: string; width: number }>> = {
+// Mountain folds up (yellow), valley folds down (red) — same fold-direction
+// convention as the 3D crease overlay, applied uniformly to every real
+// crease (including the diagonal — no crease is a special case). Facet
+// edges are triangulation artifacts, not creases in the actual pattern —
+// they are never drawn here, only mountain/valley/border. Border needs a
+// theme-specific tone: near-black reads fine on light paper but disappears
+// against a dark background.
+type DrawnAssignment = Exclude<CreaseAssignment, "facet">;
+
+const STROKES: Record<Theme, Record<DrawnAssignment, { color: string; width: number }>> = {
   light: {
     border: { color: "#0b0e14", width: 0.1 },
-    mountain: { color: "#2563eb", width: 0.07 },
+    mountain: { color: "#ca8a04", width: 0.07 },
     valley: { color: "#dc2626", width: 0.07 },
-    facet: { color: "#dde1e7", width: 0.025 },
   },
   dark: {
     border: { color: "#edecea", width: 0.1 },
-    mountain: { color: "#5b9bff", width: 0.07 },
+    mountain: { color: "#facc15", width: 0.07 },
     valley: { color: "#f87171", width: 0.07 },
-    facet: { color: "#3a3835", width: 0.025 },
   },
 };
 
-const DRAW_ORDER: CreaseAssignment[] = ["facet", "mountain", "valley", "border"];
+const DRAW_ORDER: DrawnAssignment[] = ["mountain", "valley", "border"];
 
 interface Props {
   geometry: FlasherGeometry | null;

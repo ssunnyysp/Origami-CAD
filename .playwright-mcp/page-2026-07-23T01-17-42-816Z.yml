@@ -1,0 +1,161 @@
+- generic [active] [ref=f5e1]:
+  - navigation [ref=f5e2]:
+    - link [ref=f5e4] [cursor=pointer]:
+      - /url: https://amandaghassaei.com/
+    - generic [ref=f5e6]:
+      - list [ref=f5e7]:
+        - listitem [ref=f5e8]:
+          - link "File" [ref=f5e9] [cursor=pointer]:
+            - /url: "#"
+        - listitem [ref=f5e11]:
+          - link "Examples" [ref=f5e12] [cursor=pointer]:
+            - /url: "#"
+          - text:           
+        - listitem [ref=f5e14]:
+          - link "View" [ref=f5e15] [cursor=pointer]:
+            - /url: "#"
+          - text:  
+        - listitem [ref=f5e17]:
+          - link "Pattern" [ref=f5e18] [cursor=pointer]:
+            - /url: "#"
+        - listitem [ref=f5e19]:
+          - link "Simulation" [ref=f5e20] [cursor=pointer]:
+            - /url: "#"
+        - listitem [ref=f5e21]:
+          - link "About" [ref=f5e22] [cursor=pointer]:
+            - /url: "#"
+      - list [ref=f5e23]:
+        - listitem [ref=f5e24]:
+          - link "We're working on something new → PackCAD" [ref=f5e25] [cursor=pointer]:
+            - /url: https://packcad.com/
+  - link "Show Advanced Options" [ref=f5e29] [cursor=pointer]:
+    - /url: "#"
+  - generic [ref=f5e30]:
+    - link "Hide Advanced Options" [ref=f5e31] [cursor=pointer]:
+      - /url: "#"
+    - generic [ref=f5e32]:
+      - text: "Fold Percent :"
+      - link [ref=f5e34] [cursor=pointer]:
+        - /url: "#"
+      - textbox [ref=f5e35]: "60"
+      - text: "%"
+    - generic [ref=f5e36]:
+      - link "" [ref=f5e37] [cursor=pointer]:
+        - /url: "#"
+      - generic [ref=f5e39]:
+        - checkbox "  Allow User Interaction" [ref=f5e40]
+        - generic [ref=f5e41] [cursor=pointer]:
+          - generic [ref=f5e42]: 
+          - generic [ref=f5e43]: 
+        - text: Allow User Interaction
+    - generic [ref=f5e44]:
+      - link "Pause Simulation" [ref=f5e45] [cursor=pointer]:
+        - /url: "#"
+      - link "Reset" [ref=f5e46] [cursor=pointer]:
+        - /url: "#"
+    - generic [ref=f5e47]:
+      - link " Simulation Settings:" [ref=f5e48] [cursor=pointer]:
+        - /url: "#"
+        - generic [ref=f5e49]: 
+        - text: "Simulation Settings:"
+      - link "" [ref=f5e50] [cursor=pointer]:
+        - /url: "#"
+      - text:    
+    - generic [ref=f5e52]:
+      - link " Animation Settings:" [ref=f5e53] [cursor=pointer]:
+        - /url: "#"
+        - generic [ref=f5e54]: 
+        - text: "Animation Settings:"
+      - link "" [ref=f5e55] [cursor=pointer]:
+        - /url: "#"
+    - generic [ref=f5e57]:
+      - link " Error:" [ref=f5e58] [cursor=pointer]:
+        - /url: "#"
+        - generic [ref=f5e59]: 
+        - text: "Error:"
+      - link "" [ref=f5e60] [cursor=pointer]:
+        - /url: "#"
+  - generic [ref=f5e63]:
+    - generic [ref=f5e64]:
+      - generic [ref=f5e65]:
+        - link "Material" [ref=f5e66] [cursor=pointer]:
+          - /url: "#"
+        - link "Strain" [ref=f5e71] [cursor=pointer]:
+          - /url: "#"
+      - text: View Mode
+    - generic [ref=f5e75]:
+      - link [ref=f5e78] [cursor=pointer]:
+        - /url: "#"
+      - link "Flat " [ref=f5e79] [cursor=pointer]:
+        - /url: "#"
+        - generic [ref=f5e80]: Flat
+        - generic [ref=f5e81]: 
+      - link "Folded " [ref=f5e82] [cursor=pointer]:
+        - /url: "#"
+        - generic [ref=f5e83]: Folded
+        - generic [ref=f5e84]: 
+      - generic [ref=f5e85]: "Fold Percent: 60%"
+    - generic [ref=f5e86]:
+      - generic [ref=f5e87]:
+        - link "Rotate" [ref=f5e88] [cursor=pointer]:
+          - /url: "#"
+        - link "Grab" [ref=f5e93] [cursor=pointer]:
+          - /url: "#"
+      - text: Control Mode
+    - link "Reset" [ref=f5e97] [cursor=pointer]:
+      - /url: "#"
+  - generic [ref=f5e99]:
+    - text: "View Settings:"
+    - generic [ref=f5e100]:
+      - link " Mesh Material:" [ref=f5e102] [cursor=pointer]:
+        - /url: "#"
+        - generic [ref=f5e103]: 
+        - text: "Mesh Material:"
+      - generic [ref=f5e104]:
+        - generic [ref=f5e105]:
+          - checkbox "  Mesh Visible" [checked] [ref=f5e106]
+          - generic [ref=f5e107] [cursor=pointer]:
+            - generic [ref=f5e108]: 
+            - generic [ref=f5e109]: 
+          - text: Mesh Visible
+        - generic [ref=f5e110]:
+          - generic [ref=f5e111]:
+            - radio "  Colored Material" [checked] [ref=f5e112]
+            - generic [ref=f5e113] [cursor=pointer]:
+              - generic [ref=f5e114]: 
+              - generic [ref=f5e115]: 
+            - text: Colored Material
+          - generic [ref=f5e116]:
+            - generic [ref=f5e117]: "Color 1 (rgb hex):"
+            - textbox [ref=f5e118]: ec008b
+            - generic [ref=f5e119]: "Color 2 (rgb hex):"
+            - textbox [ref=f5e120]: dddddd
+          - generic [ref=f5e121]:
+            - radio "  Strain Visualization " [ref=f5e122]
+            - generic [ref=f5e123] [cursor=pointer]:
+              - generic [ref=f5e124]: 
+              - generic [ref=f5e125]: 
+            - text: Strain Visualization
+            - link "" [ref=f5e126] [cursor=pointer]:
+              - /url: "#"
+          - generic [ref=f5e128]:
+            - radio "  Face Normals Material" [ref=f5e129]
+            - generic [ref=f5e130] [cursor=pointer]:
+              - generic [ref=f5e131]: 
+              - generic [ref=f5e132]: 
+            - text: Face Normals Material
+      - generic [ref=f5e133]:
+        - link " Edge Visibility" [ref=f5e134] [cursor=pointer]:
+          - /url: "#"
+          - generic [ref=f5e135]: 
+          - text: Edge Visibility
+        - text: ":"
+      - text:            
+      - generic [ref=f5e136]:
+        - link " Virtual Reality:" [ref=f5e137] [cursor=pointer]:
+          - /url: "#"
+          - generic [ref=f5e138]: 
+          - text: "Virtual Reality:"
+        - link "" [ref=f5e139] [cursor=pointer]:
+          - /url: "#"
+  - text:            
