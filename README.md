@@ -69,24 +69,25 @@ of crumpling:
    (`FACET_WEIGHT`), so cells stay rigid panels and the bending happens sharply *on* the
    crease lines rather than smeared across a wavy surface.
 
-At full fold every crease is driven to 100% of the angle the crease pattern declares
-(`CAP = 1.0` in `solver.py`, on every preset). The pattern is not perfectly rigidly
-foldable (a 45° diagonal can't span a non-square region corner-to-corner — see the
-generator's docstring; this is a proven geometric property, not a solver bug), so that
-incompatibility comes out as a few percent of edge strain rather than as a shallower
-fold.
+**The flasher stows flat** — it compresses radially into a low disc, the way the paper
+model does, rather than growing into a tower. That is the binding constraint on the
+solver's tuning, because fold depth and stow height trade off directly: a tighter wrap
+stacks more layers, and height is roughly layers × the effective paper thickness
+(`COLLISION_SEP`, which therefore keeps thinning as grids get finer). The shipped
+constants are the tightest wrap that still stows flat, not the tightest wrap achievable.
 
-Two things make driving that hard safe. Self-collision repulsion keeps folded layers from
-passing through each other, at an effective paper thickness (`COLLISION_SEP`) chosen
-against a real triangle-triangle intersection test — it scales *up* with ring count,
-because a tighter wrap stacks more layers in the same space and needs more clearance. And
-the number of settling passes per frame (`SUBSTEPS`) also scales with ring count: the fold
-has to propagate outward from the pinned hub one ring at a time, so larger sheets need
-more settling to converge, and without it they stow *looser* than small ones. Those passes
-are ramped over the sweep rather than spent uniformly, since only the frames near full
-fold do real work. Every preset measures zero true self-intersection across the whole
-sweep, ~100% mountain/valley sign fidelity, and ~8–10% mean edge strain. See `solver.py`'s
-module docstring for the full reasoning and measured numbers.
+Within that limit, creases are driven as far as they will go: `CAP` — the fraction of each
+crease's declared angle reached at full fold — is 1.0 on the smaller presets and eases to
+0.88 on the largest, where the pattern's own incompatibility (a 45° diagonal can't span a
+non-square region corner-to-corner; see the generator's docstring) would otherwise force
+self-intersection. Self-collision repulsion keeps folded layers from passing through each
+other, and the number of settling passes per frame scales with ring count, since the fold
+propagates outward from the pinned hub one ring at a time.
+
+Every preset measures zero true self-intersection across the whole sweep, ~100%
+mountain/valley sign fidelity, ~8% mean edge strain, and a stow height of 1.7 units
+against a flat-sheet cell size of 1.0. See `solver.py`'s module docstring for the full
+reasoning and measured numbers.
 
 ## Project layout
 
@@ -124,12 +125,9 @@ interchange format used by Origami Simulator, Rabbit Ear, and academic rigid-ori
 
 - The pattern does not rigidly close to an exact box (see "How folding works" above) —
   this is a geometric property of the current pattern, verified directly, not a bug.
-- Larger presets take substantially longer to solve, because settling passes scale with
-  ring count to keep the fold tight: roughly 3s / 13s / 40s / 98s for 7×7 / 15×15 / 23×23
+- Larger presets take longer to solve: roughly 1s / 4s / 7s / 20s for 7×7 / 15×15 / 23×23
   / 31×31. The result is cached per parameter set, so this cost is paid once per preset
-  rather than per frame, and the UI shows a "Solving fold…" state meanwhile. If the wait
-  matters more than the last few percent of fold depth, lower `SUBSTEPS_MAX` in
-  `solver.py` — that single constant trades one against the other.
+  rather than per frame, and the UI shows a "Solving fold…" state meanwhile.
 - `backend/app/flasher/fold_engine.py` is unused dead code left over from an earlier
   kinematic-wrap approach that the current solver replaced — not imported anywhere.
 
