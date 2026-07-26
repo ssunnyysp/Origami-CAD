@@ -1,22 +1,23 @@
 # Origami CAD
 
-A showcase viewer for parametric origami "flasher" patterns — deployable twist-fold
-wraps that collapse a flat square sheet into a compact cube around its central hub cell.
-A Python (FastAPI) backend owns all the geometry math; a Node (Vite + React + Three.js)
-frontend renders it.
+A parametric viewer/simulator for origami "flasher" patterns — deployable twist-fold
+wraps that collapse a flat square sheet into a compact form around its central hub cell.
+A Python (FastAPI) backend owns all the geometry and fold math; a Node (Vite + React +
+Three.js) frontend only renders.
 
 ## What it does
 
-- Generates square-flasher crease patterns parametrically: a SQUARE sheet on an N×N grid
-  around a central hub, in the style of Jeremy Shafer's flashers (Big Bang = 32×32)
-- Animates stow/deploy live via a "foldness" slider (0 = flat/deployed, 1 = wrapped/stowed)
-- Draws a CAD-style crease overlay — mountain folds blue (paper folds up), valley folds red
-  (paper folds down), border dark — fading out as the model folds
-- Renders two-sided paper: the top face takes the chosen color, the underside stays plain —
-  like real origami paper
-- Ships with 4 curated presets; the default Simple Flasher (7×7) folds from a flat square
-  into a cube-proportioned block, and the app opens on the folded form so dragging the
-  slider unfolds it
+- Generates the **wrap-pinwheel flasher** crease pattern parametrically: a square sheet
+  on an N×N grid (N odd, for a single well-centered hub cell), quartered into four
+  congruent rectangular regions arranged in a C4 pinwheel around the hub. This is a
+  hand-authored design (transcribed from a real paper model), not a procedural guess —
+  see `backend/app/flasher/generator.py`'s module docstring for the full spec.
+- Animates fold/unfold live via a "foldness" slider (0 = flat, 1 = folded)
+- Draws a CAD-style crease overlay — mountain folds yellow, valley folds red, border
+  dark — fading out as the model folds
+- Renders two-sided paper: the top face takes the chosen color, the underside stays
+  plain — like real origami paper
+- Ships with 4 curated presets (7×7, 15×15, 23×23, 31×31 "Big Bang")
 
 ## Architecture
 
@@ -25,45 +26,79 @@ frontend/   Vite + React + TypeScript + @react-three/fiber — rendering and UI 
 backend/    FastAPI — presets, crease-pattern generation, and the fold solver
 ```
 
-The fold solver runs at animation rate on screen, so it can't sit behind a per-frame HTTP
-call. Instead the backend solves the **entire fold trajectory once** per parameter set:
-`POST /api/flasher/geometry` returns the crease pattern plus vertex positions at 51 foldness
-samples (0.00 → 1.00 in 0.02 steps, the solver's native substep). The frontend linearly
-interpolates between adjacent frames at render time, so dragging the slider and the fold
-animation stay at 60fps with zero network traffic.
+The fold solver is too expensive to run at animation rate in the browser, and the
+client has zero fold logic. Instead the backend solves the **entire fold trajectory
+once** per parameter set: `POST /api/flasher/geometry` returns the crease pattern plus
+61 frames of vertex positions (foldness 0.00 → 1.00). The frontend linearly interpolates
+between adjacent frames at render time, so dragging the slider or animating is pure
+client-side lerp with zero network traffic per frame — a new request only fires when the
+structural parameters (grid size, etc.) change, and `GeometryRequest` is `@lru_cache`d
+server-side so re-selecting a previously-seen preset is free.
 
 API:
 
 - `GET /api/presets` — curated flasher presets
 - `POST /api/flasher/geometry` — flasher params in, crease pattern + fold-sweep frames out
 - `GET /api/health` — liveness check
+- `POST /api/fold/import` — parse an uploaded `.fold` file (see FOLD file support below)
+- `POST /api/fold/export` — serialize the current pattern + folded pose to `.fold`
 
 ## How folding works
 
-The crease pattern is the classic flasher structure: the sheet's two main diagonals split it
-into 4 triangular quadrants; in each quadrant the grid lines parallel to the near edge are the
-pleats, alternating mountain/valley; crossing a diagonal flips every pleat's gender (Shafer:
-"every crease should get mountained and valleyed"), which is what turns the collapse into a
-spiral wrap instead of a flat twist fold. Cells along the diagonals carry X creases — the
-reverse folds that turn a pleat 90° around the hub corner.
+The crease pattern (`generator.py`) is pure geometry with no notion of time or folding:
+each of the four regions has a 45° diagonal running from the hub corner out toward the
+sheet's corner, an accordion of horizontal/vertical **pleat** folds (mountain/valley
+alternating outward from the hub) filling the hub-side of that diagonal, and an
+uncreased flap on the outer side that wraps around the hub as the accordion compresses.
+The hub cell's four boundary edges fold ~90° as wall bends.
 
-To fold, every vertex is attracted toward a kinematic target in "square-polar" coordinates
-(taxicab radius + perimeter position) wrapping around the hub column, while a position-based
-dynamics pass enforces that every mesh edge keeps its flat-pattern length — paper folds, it
-doesn't stretch — so the sheet collapses into the compact wrapped square by pleating at the
-creases. `docs/FLASHER_NOTES.md` describes the earlier polygonal model this replaced.
+The solver (`solver.py`) is a forward position-based-dynamics simulation — the same
+family of approach as origamisimulator.org — driven from the flat sheet, not a rigid
+target composed and interpolated toward. Each frame ramps every crease's target angle a
+little further and settles the sheet with a few constraint-projection passes (edge
+length, self-collision, then dihedral angle). Two things about *how* the dihedral
+targets are weighted are what make the fold actually land on the crease pattern instead
+of crumpling:
+
+1. **The pleats (and hub-wall bends) lead; the diagonal is only a passive aid.** The
+   diagonal is not meant to be a hard-driven fold — if it's weighted as strongly as the
+   pleats it fights them and the region crumples instead of forming its wave. So the
+   diagonal is driven at low weight (`DIAGONAL_WEIGHT`): it folds only as much as the
+   surrounding pleats leave room for.
+2. **Facets (the triangulation diagonals inside each cell) are held close to flat**
+   (`FACET_WEIGHT`), so cells stay rigid panels and the bending happens sharply *on* the
+   crease lines rather than smeared across a wavy surface.
+
+At full fold every crease is driven to 100% of the angle the crease pattern declares
+(`CAP = 1.0` in `solver.py`, on every preset). The pattern is not perfectly rigidly
+foldable (a 45° diagonal can't span a non-square region corner-to-corner — see the
+generator's docstring; this is a proven geometric property, not a solver bug), so that
+incompatibility comes out as a few percent of edge strain rather than as a shallower
+fold.
+
+Two things make driving that hard safe. Self-collision repulsion keeps folded layers
+from passing through each other, at a constant effective paper thickness
+(`COLLISION_SEP`) chosen against a real triangle-triangle intersection test. And the
+number of settling passes per frame (`SUBSTEPS`) scales with ring count — the fold has
+to propagate outward from the pinned hub one ring at a time, so larger sheets need more
+settling to converge, and without it they stow *looser* than small ones. Every preset
+measures zero true self-intersection across the whole sweep, 100% mountain/valley sign
+fidelity, and ~8–10% mean edge strain. See `solver.py`'s module docstring for the full
+reasoning and measured numbers.
 
 ## Project layout
 
-- `backend/app/flasher/` — crease-pattern generator, kinematic fold engine, PBD fold solver
+- `backend/app/flasher/generator.py` — crease-pattern generation (pure geometry, no physics)
+- `backend/app/flasher/solver.py` — the fold simulation described above
 - `backend/app/fold/` — FOLD file format import/export (see below)
-- `backend/app/schemas.py` — the API contract (mirrored by `frontend/src/model/types.ts`)
+- `backend/app/schemas.py` — the API contract (mirrored by hand in `frontend/src/model/types.ts`)
 - `backend/app/presets.py` — curated flasher presets
 - `frontend/src/api/` — typed API client and the geometry-fetching hooks
 - `frontend/src/model/` — shared API types and the frame-interpolation helper
 - `frontend/src/components/scene/` — the `@react-three/fiber` scene and mesh/crease rendering
+- `frontend/src/components/pattern/` — flat 2-D crease-pattern view, an alternative to the 3-D scene
 - `frontend/src/components/ui/` — control panel widgets (model selector, sliders, color picker, FOLD import/export)
-- `frontend/src/store/` — zustand store holding presets, active params, view settings, and imported-file state
+- `frontend/src/store/` — zustand store holding presets, active params, view settings, theme, and imported-file state
 
 ## FOLD file support
 
@@ -72,24 +107,27 @@ interchange format used by Origami Simulator, Rabbit Ear, and academic rigid-ori
 
 - **Import**: drag a `.fold` file onto the control panel (or click to browse). Multi-frame
   files (e.g. a flat crease pattern plus one or more folded states) show a frame picker.
-  A flat crease-pattern frame is animated with a generic, best-effort fold solver (the same
-  approach as the flasher solver, generalized to a pattern with no known hub); an
+  A flat crease-pattern frame is animated with a generic, best-effort fold solver (not the
+  flasher-specific solver above, since an arbitrary imported pattern has no known hub); an
   already-folded 3-D frame is shown as a static pose rather than an invented animation.
   Malformed files fail with a specific error message instead of crashing.
 - **Export**: the "Export FOLD" button serializes whatever is currently on screen (generated
   or imported) into a `.fold` file — the flat pattern as frame 0, the current folded pose as
   an inheriting `file_frames` entry — and is round-trip compatible: re-importing frame 0
   reconstructs the same pattern.
-- See `backend/app/fold/` for the parser/writer and `scripts/validate_fold.py` for the
-  round-trip + sample-file validation harness.
+- See `backend/app/fold/` for the parser/writer and `backend/scripts/validate_fold.py`
+  for the round-trip + sample-file validation harness.
 
-## Not yet built (future work)
+## Known limitations
 
-See `docs/FLASHER_NOTES.md` for the full roadmap. Highlights:
-
-- Exact zero-thickness flasher geometry (polygon-involute arms, pleated arms / Lang's height order)
-- SVG cut/score file export
-- A true per-hinge rigid-origami solver (currently kinematic target + edge-length projection)
+- The pattern does not rigidly close to an exact box (see "How folding works" above) —
+  this is a geometric property of the current pattern, verified directly, not a bug.
+- Larger presets take longer to solve, because settling passes scale with ring count to
+  keep the fold tight: roughly 1s / 5s / 16s / 36s for 7×7 / 15×15 / 23×23 / 31×31. The
+  result is cached per parameter set, so this cost is paid once per preset rather than
+  per frame, and the UI shows a "Solving fold…" state meanwhile.
+- `backend/app/flasher/fold_engine.py` is unused dead code left over from an earlier
+  kinematic-wrap approach that the current solver replaced — not imported anywhere.
 
 ## Development
 
@@ -99,15 +137,22 @@ Backend (Python 3.12+):
 cd backend
 python3 -m venv .venv
 .venv/bin/pip install -r requirements.txt
-.venv/bin/uvicorn app.main:app --port 8000 --reload
+.venv/bin/uvicorn app.main:app --port 8000
 ```
+
+**The backend does not auto-reload.** Editing `generator.py`/`solver.py`/anything backend
+and expecting the running server to pick it up will silently serve stale results instead —
+kill and restart the process after every backend edit.
 
 Frontend (in a second terminal):
 
 ```
 cd frontend
 npm install
-npm run dev
+npm run dev          # vite dev server on :5173, proxies /api to :8000
+npm run build         # tsc -b && vite build
+npm run lint          # oxlint
 ```
 
-Open http://localhost:5173 — the Vite dev server proxies `/api` to the backend on port 8000.
+Open http://localhost:5173 once both are running. `.claude/launch.json` defines the same
+two processes for the IDE launcher. There is no test suite in this repo.
