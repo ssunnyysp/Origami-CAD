@@ -69,24 +69,29 @@ of crumpling:
    (`FACET_WEIGHT`), so cells stay rigid panels and the bending happens sharply *on* the
    crease lines rather than smeared across a wavy surface.
 
-**The flasher stows flat** — it compresses radially into a low disc, the way the paper
-model does, rather than growing into a tower. That is the binding constraint on the
-solver's tuning, because fold depth and stow height trade off directly: a tighter wrap
-stacks more layers, and height is roughly layers × the effective paper thickness
-(`COLLISION_SEP`, which therefore keeps thinning as grids get finer). The shipped
-constants are the tightest wrap that still stows flat, not the tightest wrap achievable.
+**The flasher stows flat** — it compresses radially into a low disc sitting just under
+the hub plane, the way the paper model does, rather than growing into a tower, tilting,
+or dishing in the middle. That is the binding constraint on the solver's tuning, and it
+is checked three ways: stowed height, tilt of the best-fit plane (0.0° on every preset),
+and the radial height profile from hub to rim.
 
-Within that limit, creases are driven as far as they will go: `CAP` — the fraction of each
-crease's declared angle reached at full fold — is 1.0 on the smaller presets and eases to
-0.88 on the largest, where the pattern's own incompatibility (a 45° diagonal can't span a
-non-square region corner-to-corner; see the generator's docstring) would otherwise force
-self-intersection. Self-collision repulsion keeps folded layers from passing through each
-other, and the number of settling passes per frame scales with ring count, since the fold
-propagates outward from the pinned hub one ring at a time.
+Within that limit the creases are driven all the way: every preset reaches 100% of the
+angles the crease pattern declares. What makes that possible is the self-collision model
+— **vertex-versus-triangle**, not vertex-versus-vertex. A vertex-pair test can only stop
+layers passing through each other by holding them far apart, which is exactly what
+inflates the stow; and it structurally cannot catch the crossing that actually happens
+here, an edge slicing through the middle of a facet with no two vertices ever close. A
+real point-to-triangle test prevents penetration directly, so layers can be thin — and
+thin layers are what keep the stow flat while the wrap pulls in tight. Bigger sheets also
+get more settling passes, since the fold propagates outward from the pinned hub one ring
+at a time.
 
-Every preset measures zero true self-intersection across the whole sweep, ~100%
-mountain/valley sign fidelity, ~8% mean edge strain, and a stow height of 1.7 units
-against a flat-sheet cell size of 1.0. See `solver.py`'s module docstring for the full
+Every preset measures zero true self-intersection across the whole sweep, 98–100%
+mountain/valley sign fidelity, and a stow height of 1.2–1.7 units against a flat-sheet
+cell size of 1.0. The cost of the deeper fold is edge strain, ~9–11%: the pattern is not
+perfectly rigidly foldable (a 45° diagonal can't span a non-square region
+corner-to-corner — see the generator's docstring), so at full declared angles that
+incompatibility has to go somewhere. See `solver.py`'s module docstring for the full
 reasoning and measured numbers.
 
 ## Project layout
@@ -125,7 +130,7 @@ interchange format used by Origami Simulator, Rabbit Ear, and academic rigid-ori
 
 - The pattern does not rigidly close to an exact box (see "How folding works" above) —
   this is a geometric property of the current pattern, verified directly, not a bug.
-- Larger presets take longer to solve: roughly 1s / 4s / 7s / 20s for 7×7 / 15×15 / 23×23
+- Larger presets take longer to solve: roughly 1s / 4s / 7s / 17s for 7×7 / 15×15 / 23×23
   / 31×31. The result is cached per parameter set, so this cost is paid once per preset
   rather than per frame, and the UI shows a "Solving fold…" state meanwhile.
 - `backend/app/flasher/fold_engine.py` is unused dead code left over from an earlier

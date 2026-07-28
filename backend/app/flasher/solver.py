@@ -48,19 +48,35 @@ from scipy.spatial import cKDTree
 from .generator import HUB_HALF, CreasePattern, FlasherParams
 
 STEPS = 60  # foldness samples returned (frames = STEPS + 1)
-CAP = 0.68  # fraction of each crease's full declared angle driven at
-# foldness=1. NOT 1.0 (a hard 180° flat-fold): this pattern is geometrically
-# over-constrained near full fold (folding every crease to its full angle
-# leaves a large loop-closure gap — measured ~30% of the sheet), so pushing
-# to 180° forces the incompatibility out as edge STRETCHING (measured ~9%
-# strain) and blunts the creases. Driving to ~0.68 instead reaches a crisp
-# OPEN WAVE — pleats around 90-110°, the up/down corrugation the pattern is
-# meant to make — with the creases folding 100% in their declared direction,
-# strain down to ~5%, facets nearly flat (sharp creases), and no
-# self-intersection. Raising it folds deeper but strains more and dulls the
-# wave; lowering it is a shallower wave.
 
-SUBSTEPS = 8  # PBD settle passes per frame
+# THE STOW MUST STAY FLAT. The flasher compresses radially into a low disc
+# sitting just under the hub plane; it must not dome, cone, or grow into a
+# tower as it folds. The gate used for every constant here: final-frame z-span
+# within ~0.2 of the flat baseline, the rim (border vertices) staying level,
+# and the radial z-profile flat from hub to rim. It is easy to wrap tighter by
+# letting the model grow tall or dish in the middle — that is a regression,
+# not progress, and it reads as obviously wrong next to real paper.
+
+CAP = 1.0  # fraction of each crease's declared angle driven at foldness=1.
+# Every preset now reaches its FULL declared angles. This is a hard ceiling:
+# _project_dihedrals wraps angles into (-180, 180], so a target past 180 deg
+# aliases to a negative angle and folds the crease backwards. Never exceed 1.0.
+# It only became reachable once self-collision became vertex-vs-triangle (see
+# VT_* below) — with the old vertex-pair repulsion the large grids phased badly
+# before getting here, which is what used to force CAP down per preset.
+
+# SUBSTEPS — PBD settle passes per frame, scaled UP with ring count: a bigger
+# sheet needs more folding applied, because the fold propagates outward from
+# the pinned hub one ring at a time and a 15-ring sheet starved of passes stops
+# early and stows loose. It is bounded above by FLATNESS, not by the wrap
+# curve: past these values the interior starts dishing (31x31 at 48 passes
+# sinks to -0.72 at the centre) and the stow grows tall. Measured wrap at
+# CAP=1.0: 7x7 8->0.480; 15x15 12->0.501; 23x23 12->0.610; 31x31 16->0.652.
+SUBSTEPS_SMALL = 8  # rings <= 4
+SUBSTEPS_MID = 12  # rings 5..12
+SUBSTEPS_LARGE = 16  # rings >= 13
+SUBSTEPS_MID_FROM_RINGS = 5
+SUBSTEPS_LARGE_FROM_RINGS = 13
 DIHEDRAL_ITERS = 6  # dihedral projection iterations per substep (run last so
 # the crease pattern dominates the settled shape)
 LENGTH_ITERS = 4
@@ -79,16 +95,35 @@ FACET_WEIGHT = 1.0  # X-triangulation diagonals — held toward flat so cells
 # facet flex drops to 2-7° mean (sharp creases) with the pleats still folding
 # 98-100% in their declared direction and zero self-intersection.
 
-COLLISION_ITERS = 3
-COLLISION_FLAT_EXCLUDE = 1.6  # only push apart pairs at least this far apart
-# in the FLAT sheet (adjacent pleat walls are meant to come together)
-# Effective layer-separation ("paper thickness") scales down with ring count:
-# a coarse preset stows into few chunky layers needing a big gap; a fine
-# preset has many thin layers over a larger wrap and needs a small one.
-COLLISION_SEP_AT_ZERO_RINGS = 0.78
-COLLISION_SEP_PER_RING = 0.035
-COLLISION_SEP_MIN = 0.2
-COLLISION_SEP_MAX = 0.62
+# --- self-collision: VERTEX-vs-TRIANGLE, not vertex-vs-vertex ---------------
+# THIS IS WHAT LETS THE STOW BE BOTH TIGHT AND FLAT, and it is the reason the
+# thickness below can be small. Stow height is roughly (layers stacked) x
+# (layer thickness), so a flat stow needs THIN layers; but the old vertex-pair
+# repulsion could only stop layers phasing by holding them a big distance
+# apart (0.26-0.78), which is exactly what inflated the model into a tower
+# when the fold was driven deep. Vertex-pair distance also structurally cannot
+# catch the crossings that actually happen here: an edge passing through the
+# middle of a facet with no two vertices ever close. Measured, a trailing
+# vertex-pair pass only took 31x31 from 80 true intersections to 64.
+#
+# A real point-to-triangle test fixes both: it prevents penetration directly,
+# so the thickness only has to be a true paper thickness rather than a safety
+# shell, and thin layers keep the stow flat while the wrap pulls in tight.
+# Layer thickness in grid units (cell = 1.0) — roughly half what the old
+# vertex-pair repulsion needed for the same zero-phasing result, which is
+# exactly why the stow comes out flatter. Thinner still on the largest grids,
+# because they stack the most layers and height ~ layers x thickness; they can
+# afford it because their higher substep count moves less per pass, so nothing
+# tunnels through. Measured at 31x31/CAP=1.0/16 passes: 0.15 phases (228
+# crossings), 0.20 and above are clean.
+VT_THICKNESS_DEFAULT = 0.35
+VT_THICKNESS_LARGE = 0.25  # rings >= SUBSTEPS_LARGE_FROM_RINGS
+VT_ITERS = 6  # projection passes per call. NOT optional: a vertex buried in a
+# tight stow gets many simultaneous contacts, and the per-vertex averaging
+# below dilutes each one, so a couple of passes leaves crossings behind.
+# Measured at 31x31 / thickness 0.35: 2 passes -> 4 intersections, 6 -> zero.
+VT_FLAT_EXCLUDE = 1.6  # ignore triangles this close in the FLAT sheet — those
+# are the vertex's own neighbourhood, which is meant to touch itself
 
 SEED_KICK = 0.01  # tiny random z offset on the flat seed so the first fold
 # step has a direction to break out of the perfectly-flat plane
@@ -161,11 +196,29 @@ class FlasherFoldSolver:
         self.pinned = rho <= HUB_HALF + 1e-9
 
         rings = max(pattern.ring_count, 1)
-        self.collision_sep = float(
-            np.clip(
-                COLLISION_SEP_AT_ZERO_RINGS - COLLISION_SEP_PER_RING * rings,
-                COLLISION_SEP_MIN,
-                COLLISION_SEP_MAX,
+        self.cap = CAP
+        # Bigger sheets get more folding applied (see SUBSTEPS_* above), and
+        # thinner layers so the extra depth doesn't stack into height.
+        if rings >= SUBSTEPS_LARGE_FROM_RINGS:
+            self.substeps = SUBSTEPS_LARGE
+            self.vt_thickness = VT_THICKNESS_LARGE
+        elif rings >= SUBSTEPS_MID_FROM_RINGS:
+            self.substeps = SUBSTEPS_MID
+            self.vt_thickness = VT_THICKNESS_DEFAULT
+        else:
+            self.substeps = SUBSTEPS_SMALL
+            self.vt_thickness = VT_THICKNESS_DEFAULT
+        # Flat-space centroid of every face, used to skip a vertex's own
+        # neighbourhood in the vertex-triangle test (those panels share creases
+        # and are supposed to touch).
+        self.face_flat_cent = self.flat[self.face_vids][:, :, :2].mean(axis=1)
+        # A triangle's own extent, so the candidate search radius covers it.
+        self.tri_reach = float(
+            np.max(
+                np.linalg.norm(
+                    self.flat[self.face_vids][:, :, :2] - self.face_flat_cent[:, None, :],
+                    axis=2,
+                )
             )
         )
 
@@ -197,7 +250,7 @@ class FlasherFoldSolver:
         signed angle, facets toward flat — each scaled by its weight so the
         pleats and hub walls lead, the diagonal only aids, and cells stay
         rigid. Run last/hardest so the crease pattern dominates."""
-        target = np.where(self.real_hinge, self.sign * self.mag * CAP * frac, 0.0)
+        target = np.where(self.real_hinge, self.sign * self.mag * self.cap * frac, 0.0)
         w = np.ones(self.V)
         w[self.pinned] = 0.0
         w1, w2, w3, w4 = w[self.hi], w[self.hj], w[self.hk], w[self.hl]
@@ -234,26 +287,127 @@ class FlasherFoldSolver:
             dX[self.pinned] = 0.0
             X += dX
 
-    def _collide(self, X):
-        sep = self.collision_sep
-        for _ in range(COLLISION_ITERS):
-            pairs = cKDTree(X).query_pairs(sep, output_type="ndarray")
+    @staticmethod
+    def _closest_on_tri(p, a, b, c):
+        """Closest point on triangle (a,b,c) to p, plus barycentric weights.
+
+        Vectorised Ericson (Real-Time Collision Detection) region test: the
+        closest point is on a vertex, an edge, or the face interior.
+        """
+        ab, ac, ap = b - a, c - a, p - a
+        d1 = np.einsum("ij,ij->i", ab, ap)
+        d2 = np.einsum("ij,ij->i", ac, ap)
+        bp = p - b
+        d3 = np.einsum("ij,ij->i", ab, bp)
+        d4 = np.einsum("ij,ij->i", ac, bp)
+        cp = p - c
+        d5 = np.einsum("ij,ij->i", ab, cp)
+        d6 = np.einsum("ij,ij->i", ac, cp)
+
+        va = d3 * d6 - d5 * d4
+        vb = d5 * d2 - d1 * d6
+        vc = d1 * d4 - d3 * d2
+        denom = np.where(np.abs(va + vb + vc) < 1e-12, 1e-12, va + vb + vc)
+        v_f = vb / denom
+        w_f = vc / denom
+
+        # start from the face-interior solution, then override by region
+        v = v_f
+        w = w_f
+        # vertex a
+        m = (d1 <= 0) & (d2 <= 0)
+        v = np.where(m, 0.0, v)
+        w = np.where(m, 0.0, w)
+        # vertex b
+        m2 = (d3 >= 0) & (d4 <= d3)
+        v = np.where(m2, 1.0, v)
+        w = np.where(m2, 0.0, w)
+        # vertex c
+        m3 = (d6 >= 0) & (d5 <= d6)
+        v = np.where(m3, 0.0, v)
+        w = np.where(m3, 1.0, w)
+        # edge ab
+        m4 = (vc <= 0) & (d1 >= 0) & (d3 <= 0) & ~(m | m2 | m3)
+        t_ab = d1 / np.where((d1 - d3) == 0, 1e-12, d1 - d3)
+        v = np.where(m4, t_ab, v)
+        w = np.where(m4, 0.0, w)
+        # edge ac
+        m5 = (vb <= 0) & (d2 >= 0) & (d6 <= 0) & ~(m | m2 | m3 | m4)
+        t_ac = d2 / np.where((d2 - d6) == 0, 1e-12, d2 - d6)
+        v = np.where(m5, 0.0, v)
+        w = np.where(m5, t_ac, w)
+        # edge bc
+        m6 = (va <= 0) & ((d4 - d3) >= 0) & ((d5 - d6) >= 0) & ~(m | m2 | m3 | m4 | m5)
+        t_bc = (d4 - d3) / np.where(
+            ((d4 - d3) + (d5 - d6)) == 0, 1e-12, (d4 - d3) + (d5 - d6)
+        )
+        v = np.where(m6, 1.0 - t_bc, v)
+        w = np.where(m6, t_bc, w)
+
+        q = a + ab * v[:, None] + ac * w[:, None]
+        return q, 1.0 - v - w, v, w
+
+    def _collide_vt(self, X):
+        """Push vertices out of triangles they are penetrating.
+
+        Unlike vertex-pair repulsion this catches an edge/vertex passing
+        through the middle of a facet, so the layer thickness can stay thin
+        (which is what keeps the stow flat) without the sheet phasing.
+        """
+        h = self.vt_thickness
+        for _ in range(VT_ITERS):
+            tris = X[self.face_vids]
+            cent = tris.mean(axis=1)
+            # ALL triangles within reach, not the K nearest. A K-nearest search
+            # fails exactly where it matters: on a fine grid the K closest
+            # triangles to a vertex are all in its own flat neighbourhood (which
+            # is excluded below), so the penetrating layer never gets tested.
+            pairs = cKDTree(X).sparse_distance_matrix(
+                cKDTree(cent), self.tri_reach + h, output_type="ndarray"
+            )
             if len(pairs) == 0:
                 return
-            i, j = pairs[:, 0], pairs[:, 1]
-            flat_d = np.linalg.norm(self.flat[i, :2] - self.flat[j, :2], axis=1)
-            far = flat_d > COLLISION_FLAT_EXCLUDE
-            i, j = i[far], j[far]
-            if len(i) == 0:
+            vi = pairs["i"].astype(np.intp)
+            fi = pairs["j"].astype(np.intp)
+            # skip the vertex's own neighbourhood in the FLAT sheet
+            far_flat = (
+                np.linalg.norm(self.flat[vi, :2] - self.face_flat_cent[fi], axis=1)
+                > VT_FLAT_EXCLUDE
+            )
+            vi, fi = vi[far_flat], fi[far_flat]
+            if len(vi) == 0:
                 return
-            d = X[j] - X[i]
-            dist = np.maximum(np.linalg.norm(d, axis=1, keepdims=True), 1e-6)
-            push = np.maximum(sep - dist[:, 0], 0.0)[:, None] * (d / dist)
-            F = np.zeros_like(X)
-            np.add.at(F, i, -push)
-            np.add.at(F, j, push)
-            F[self.pinned] = 0.0
-            X += F
+            a, b, c = X[self.face_vids[fi, 0]], X[self.face_vids[fi, 1]], X[self.face_vids[fi, 2]]
+            p = X[vi]
+            q, wa, wb, wc = self._closest_on_tri(p, a, b, c)
+            d = p - q
+            dist = np.linalg.norm(d, axis=1)
+            hit = dist < h
+            if not hit.any():
+                return
+            vi, fi = vi[hit], fi[hit]
+            d, dist = d[hit], dist[hit]
+            wa, wb, wc = wa[hit], wb[hit], wc[hit]
+            # degenerate (vertex exactly on the facet): use the facet normal
+            nrm = np.cross(b[hit] - a[hit], c[hit] - a[hit])
+            nl = np.linalg.norm(nrm, axis=1, keepdims=True)
+            n = np.where(
+                dist[:, None] > 1e-9, d / np.maximum(dist, 1e-9)[:, None], nrm / np.maximum(nl, 1e-9)
+            )
+            pen = (h - dist)[:, None]
+            # split the correction between the vertex and the facet
+            corr = 0.5 * pen * n
+            dX = np.zeros_like(X)
+            cnt = np.zeros(self.V)
+            np.add.at(dX, vi, corr)
+            np.add.at(cnt, vi, 1.0)
+            for col, wgt in ((0, wa), (1, wb), (2, wc)):
+                tv = self.face_vids[fi, col]
+                np.add.at(dX, tv, -corr * wgt[:, None])
+                np.add.at(cnt, tv, 1.0)
+            dX /= np.maximum(cnt, 1.0)[:, None]
+            dX[self.pinned] = 0.0
+            X += dX
 
     # --- sweep -------------------------------------------------------------
     @staticmethod
@@ -271,10 +425,10 @@ class FlasherFoldSolver:
         for step in range(1, STEPS + 1):
             t = step / STEPS
             frac = self._smoothstep(t)
-            for _ in range(SUBSTEPS):
+            for _ in range(self.substeps):
                 self._project_lengths(X)
-                self._collide(X)
-                self._project_dihedrals(X, frac)  # last → creases dominate
+                self._project_dihedrals(X, frac)  # creases dominate the shape
+                self._collide_vt(X)  # ...but nothing is allowed to pass through
                 X[self.pinned, 2] = 0.0
             frames.append(np.round(X, 4).reshape(-1).tolist())
             samples.append(t)
