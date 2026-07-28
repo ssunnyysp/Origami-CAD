@@ -57,7 +57,7 @@ STEPS = 60  # foldness samples returned (frames = STEPS + 1)
 # letting the model grow tall or dish in the middle — that is a regression,
 # not progress, and it reads as obviously wrong next to real paper.
 
-CAP = 0.80  # fraction of each crease's declared angle driven at foldness=1.
+CAP = 0.90  # fraction of each crease's declared angle driven at foldness=1.
 # NOT 1.0, and the reason is CRUMPLING, not self-intersection. Past ~0.85 the
 # sheet stops turning coherently: measured on 23x23 at CAP=1.0 the innermost
 # ring twists +8 deg while every ring outside it twists -17..-38, i.e. the
@@ -152,8 +152,8 @@ SEED_KICK = 0.01  # tiny random z offset on the flat seed so the first fold
 # Bigger sheets get more, having more rings to wind. This also LOWERS strain
 # (23x23: 7.45% -> 6.89%), confirming the spiral is the lower-energy mode the
 # solver was previously failing to find rather than something forced on it.
-SEED_SWIRL_SMALL = -0.5  # rings <= 4
-SEED_SWIRL_LARGE = -1.0
+SEED_SWIRL_SMALL = -0.8  # rings <= 4
+SEED_SWIRL_LARGE = -1.5
 
 
 class FlasherFoldSolver:

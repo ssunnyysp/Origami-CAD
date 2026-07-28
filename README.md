@@ -93,9 +93,9 @@ stays flat. Bigger sheets also get more settling passes, since the fold propagat
 from the pinned hub one ring at a time.
 
 Every preset measures zero true self-intersection across the whole sweep, 98–100%
-mountain/valley sign fidelity, a coherent spiral (rotation growing outward, ~48° at the
-rim), and a stow height of 1.2–1.6 units against a flat-sheet cell size of 1.0. Edge
-strain runs ~6–8%: the pattern is not perfectly rigidly foldable (a 45° diagonal can't
+mountain/valley sign fidelity, a coherent spiral (rotation growing outward, ~57–74° at
+the rim), and a stow height of 1.2–1.7 units against a flat-sheet cell size of 1.0. Edge
+strain runs ~7–9%: the pattern is not perfectly rigidly foldable (a 45° diagonal can't
 span a non-square region corner-to-corner — see the generator's docstring), so some of
 that incompatibility has to go somewhere. See `solver.py`'s module docstring for the full
 reasoning and measured numbers.
