@@ -57,29 +57,47 @@ STEPS = 60  # foldness samples returned (frames = STEPS + 1)
 # letting the model grow tall or dish in the middle — that is a regression,
 # not progress, and it reads as obviously wrong next to real paper.
 
-CAP = 0.90  # fraction of each crease's declared angle driven at foldness=1.
-# NOT 1.0, and the reason is CRUMPLING, not self-intersection. Past ~0.85 the
-# sheet stops turning coherently: measured on 23x23 at CAP=1.0 the innermost
-# ring twists +8 deg while every ring outside it twists -17..-38, i.e. the
-# centre fights the wrap instead of joining it, and the within-ring rotation
-# spread jumps from 12 deg to 25. Facet flex and strain climb with it (1.8 ->
-# 3.5 deg, 5.5% -> 10.1%). That incoherence is exactly what reads as a crumple.
-# 0.80 keeps every ring turning the same way with a tight spread. 1.0 is a hard
-# ceiling regardless — _project_dihedrals wraps angles into (-180, 180], so a
-# target past 180 deg aliases to a negative angle and folds the crease backward.
+# How hard each preset is folded, and how it is settled, as a table keyed by
+# ring count. These are NOT free parameters — each row sits at the measured
+# limit of a DIFFERENT gate, and the binding gate changes with sheet size:
+#
+#   rings  preset  cap   sub  swirl   wrap   bound by
+#   <=4    7x7     0.94    8   -0.8   0.486  facet flex (7.9 deg; only 3 rings
+#                                            share the bending, so cells smear
+#                                            before anything else gives)
+#   5-8    15x15   1.00   12   -1.5   0.494  stow height (1.72 of 1.75)
+#   9-12   23x23   1.00   16   -1.5   0.556  strain / dishing
+#   >=13   31x31   0.95   24   -1.5   0.615  strain + dishing (sub 28 -> the
+#                                            centre sinks -0.55 and height 1.84)
+#   >=17   (none)  0.90   24   -1.5          strain, for grids past any preset
+#
+# CAP is the fraction of each crease's declared angle driven at foldness=1, and
+# its ceiling is CRUMPLING, not self-intersection: past the limit the innermost
+# ring starts turning AGAINST the wrap (measured on 23x23 at cap 1.0 / swirl
+# -1.0: inner +8 deg while every outer ring is -17..-38) and within-ring spread
+# doubles. How far it can go depends on SEED_SWIRL — a stronger swirl stabilises
+# the spiral mode and buys real depth. 1.0 is a hard ceiling regardless, since
+# _project_dihedrals wraps angles into (-180, 180] and a target past 180 deg
+# aliases to a negative angle, folding the crease backward.
+#
+# SUBSTEPS (PBD settle passes per frame) scales up with ring count: the fold
+# propagates outward from the pinned hub one ring at a time. More passes also
+# LOWER strain, which is what lets the mid grids reach cap 1.0 at all. Bounded
+# above by flatness — past these values the interior dishes and the stow grows.
+#
+# SEED_SWIRL is in radians of twist accumulated at the sheet edge over the whole
+# fold (see below). Small sheets take less: over-swirling a 7x7 bends facets
+# instead of turning rings.
+#
+# Rows are (min_rings, cap, substeps, swirl, layer_thickness), highest first.
+FOLD_PROFILE = (
+    (17, 0.90, 24, -1.5, 0.25),
+    (13, 0.95, 24, -1.5, 0.25),
+    (9, 1.00, 16, -1.5, 0.35),
+    (5, 1.00, 12, -1.5, 0.35),
+    (0, 0.94, 8, -0.8, 0.35),
+)
 
-# SUBSTEPS — PBD settle passes per frame, scaled UP with ring count: a bigger
-# sheet needs more folding applied, because the fold propagates outward from
-# the pinned hub one ring at a time and a 15-ring sheet starved of passes stops
-# early and stows loose. It is bounded above by FLATNESS, not by the wrap
-# curve: past these values the interior starts dishing (31x31 at 48 passes
-# sinks to -0.72 at the centre) and the stow grows tall. Measured wrap at
-# CAP=1.0: 7x7 8->0.480; 15x15 12->0.501; 23x23 12->0.610; 31x31 16->0.652.
-SUBSTEPS_SMALL = 8  # rings <= 4
-SUBSTEPS_MID = 12  # rings 5..12
-SUBSTEPS_LARGE = 16  # rings >= 13
-SUBSTEPS_MID_FROM_RINGS = 5
-SUBSTEPS_LARGE_FROM_RINGS = 13
 DIHEDRAL_ITERS = 6  # dihedral projection iterations per substep (run last so
 # the crease pattern dominates the settled shape)
 LENGTH_ITERS = 4
@@ -119,8 +137,6 @@ FACET_WEIGHT = 1.0  # X-triangulation diagonals — held toward flat so cells
 # afford it because their higher substep count moves less per pass, so nothing
 # tunnels through. Measured at 31x31/CAP=1.0/16 passes: 0.15 phases (228
 # crossings), 0.20 and above are clean.
-VT_THICKNESS_DEFAULT = 0.35
-VT_THICKNESS_LARGE = 0.25  # rings >= SUBSTEPS_LARGE_FROM_RINGS
 VT_ITERS = 6  # projection passes per call. NOT optional: a vertex buried in a
 # tight stow gets many simultaneous contacts, and the per-vertex averaging
 # below dilutes each one, so a couple of passes leaves crossings behind.
@@ -152,8 +168,6 @@ SEED_KICK = 0.01  # tiny random z offset on the flat seed so the first fold
 # Bigger sheets get more, having more rings to wind. This also LOWERS strain
 # (23x23: 7.45% -> 6.89%), confirming the spiral is the lower-energy mode the
 # solver was previously failing to find rather than something forced on it.
-SEED_SWIRL_SMALL = -0.8  # rings <= 4
-SEED_SWIRL_LARGE = -1.5
 
 
 class FlasherFoldSolver:
@@ -223,21 +237,15 @@ class FlasherFoldSolver:
         self.pinned = rho <= HUB_HALF + 1e-9
 
         rings = max(pattern.ring_count, 1)
-        self.cap = CAP
-        # Bigger sheets get more folding applied (see SUBSTEPS_* above), and
-        # thinner layers so the extra depth doesn't stack into height.
-        if rings >= SUBSTEPS_LARGE_FROM_RINGS:
-            self.substeps = SUBSTEPS_LARGE
-            self.vt_thickness = VT_THICKNESS_LARGE
-        elif rings >= SUBSTEPS_MID_FROM_RINGS:
-            self.substeps = SUBSTEPS_MID
-            self.vt_thickness = VT_THICKNESS_DEFAULT
-        else:
-            self.substeps = SUBSTEPS_SMALL
-            self.vt_thickness = VT_THICKNESS_DEFAULT
-        # Small sheets have fewer rings to wind, and over-swirling them just
-        # bends facets instead of turning rings (7x7 facet flex 5.2 -> 7.0 deg).
-        self.swirl = SEED_SWIRL_SMALL if rings <= 4 else SEED_SWIRL_LARGE
+        # Per-preset fold profile (see FOLD_PROFILE above).
+        for min_rings, cap, subs, swirl, thick in FOLD_PROFILE:
+            if rings >= min_rings:
+                self.cap = cap
+                self.substeps = subs
+                self.swirl = swirl
+                self.vt_thickness = thick
+                break
+
         # Flat-space centroid of every face, used to skip a vertex's own
         # neighbourhood in the vertex-triangle test (those panels share creases
         # and are supposed to touch).

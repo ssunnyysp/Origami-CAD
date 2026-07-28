@@ -81,8 +81,13 @@ paper model. That is not automatic: the sheet can also just crush straight inwar
 buckles the rings and reads as crumpling, and the two are near-equally valid solutions to
 the same constraints. The solver breaks that tie with a small coherent swirl applied as
 the fold progresses (`SEED_SWIRL`), and caps how hard the creases are driven (`CAP`),
-since past ~0.85 the innermost ring starts turning against the wrap. Notably the swirl
-*lowers* edge strain, confirming the spiral is the natural mode rather than an imposed one.
+since past a certain point the innermost ring starts turning against the wrap. Notably the
+swirl *lowers* edge strain, confirming the spiral is the natural mode rather than an
+imposed one — and a stronger swirl stabilises it enough to allow a deeper fold. How hard
+each preset is driven, how much it is settled, and how much it is swirled are set together
+per grid size by a small table (`FOLD_PROFILE`), because each size runs into a different
+limit first: the smallest into facet flex, the middle into stow height, the largest into
+strain and dishing.
 
 Self-collision is **vertex-versus-triangle**, not vertex-versus-vertex. A vertex-pair test
 can only stop layers passing through each other by holding them far apart, which inflates
@@ -93,7 +98,7 @@ stays flat. Bigger sheets also get more settling passes, since the fold propagat
 from the pinned hub one ring at a time.
 
 Every preset measures zero true self-intersection across the whole sweep, 98–100%
-mountain/valley sign fidelity, a coherent spiral (rotation growing outward, ~57–74° at
+mountain/valley sign fidelity, a coherent spiral (rotation growing outward, ~61–77° at
 the rim), and a stow height of 1.2–1.7 units against a flat-sheet cell size of 1.0. Edge
 strain runs ~7–9%: the pattern is not perfectly rigidly foldable (a 45° diagonal can't
 span a non-square region corner-to-corner — see the generator's docstring), so some of
@@ -136,7 +141,7 @@ interchange format used by Origami Simulator, Rabbit Ear, and academic rigid-ori
 
 - The pattern does not rigidly close to an exact box (see "How folding works" above) —
   this is a geometric property of the current pattern, verified directly, not a bug.
-- Larger presets take longer to solve: roughly 1s / 4s / 7s / 17s for 7×7 / 15×15 / 23×23
+- Larger presets take longer to solve: roughly 1s / 4s / 10s / 26s for 7×7 / 15×15 / 23×23
   / 31×31. The result is cached per parameter set, so this cost is paid once per preset
   rather than per frame, and the UI shows a "Solving fold…" state meanwhile.
 - `backend/app/flasher/fold_engine.py` is unused dead code left over from an earlier
