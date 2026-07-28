@@ -75,23 +75,29 @@ or dishing in the middle. That is the binding constraint on the solver's tuning,
 is checked three ways: stowed height, tilt of the best-fit plane (0.0° on every preset),
 and the radial height profile from hub to rim.
 
-Within that limit the creases are driven all the way: every preset reaches 100% of the
-angles the crease pattern declares. What makes that possible is the self-collision model
-— **vertex-versus-triangle**, not vertex-versus-vertex. A vertex-pair test can only stop
-layers passing through each other by holding them far apart, which is exactly what
-inflates the stow; and it structurally cannot catch the crossing that actually happens
-here, an edge slicing through the middle of a facet with no two vertices ever close. A
-real point-to-triangle test prevents penetration directly, so layers can be thin — and
-thin layers are what keep the stow flat while the wrap pulls in tight. Bigger sheets also
-get more settling passes, since the fold propagates outward from the pinned hub one ring
-at a time.
+Within that limit, the sheet must **wrap rotationally** — every ring turning about the
+hub, progressively more further out, so it winds up clockwise/counter-clockwise like the
+paper model. That is not automatic: the sheet can also just crush straight inward, which
+buckles the rings and reads as crumpling, and the two are near-equally valid solutions to
+the same constraints. The solver breaks that tie with a small coherent swirl applied as
+the fold progresses (`SEED_SWIRL`), and caps how hard the creases are driven (`CAP`),
+since past ~0.85 the innermost ring starts turning against the wrap. Notably the swirl
+*lowers* edge strain, confirming the spiral is the natural mode rather than an imposed one.
+
+Self-collision is **vertex-versus-triangle**, not vertex-versus-vertex. A vertex-pair test
+can only stop layers passing through each other by holding them far apart, which inflates
+the stow, and it structurally cannot catch the crossing that actually happens here — an
+edge slicing through the middle of a facet with no two vertices ever close. A real
+point-to-triangle test prevents penetration directly, so layers stay thin and the stow
+stays flat. Bigger sheets also get more settling passes, since the fold propagates outward
+from the pinned hub one ring at a time.
 
 Every preset measures zero true self-intersection across the whole sweep, 98–100%
-mountain/valley sign fidelity, and a stow height of 1.2–1.7 units against a flat-sheet
-cell size of 1.0. The cost of the deeper fold is edge strain, ~9–11%: the pattern is not
-perfectly rigidly foldable (a 45° diagonal can't span a non-square region
-corner-to-corner — see the generator's docstring), so at full declared angles that
-incompatibility has to go somewhere. See `solver.py`'s module docstring for the full
+mountain/valley sign fidelity, a coherent spiral (rotation growing outward, ~48° at the
+rim), and a stow height of 1.2–1.6 units against a flat-sheet cell size of 1.0. Edge
+strain runs ~6–8%: the pattern is not perfectly rigidly foldable (a 45° diagonal can't
+span a non-square region corner-to-corner — see the generator's docstring), so some of
+that incompatibility has to go somewhere. See `solver.py`'s module docstring for the full
 reasoning and measured numbers.
 
 ## Project layout

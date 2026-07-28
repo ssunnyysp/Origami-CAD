@@ -57,13 +57,16 @@ STEPS = 60  # foldness samples returned (frames = STEPS + 1)
 # letting the model grow tall or dish in the middle — that is a regression,
 # not progress, and it reads as obviously wrong next to real paper.
 
-CAP = 1.0  # fraction of each crease's declared angle driven at foldness=1.
-# Every preset now reaches its FULL declared angles. This is a hard ceiling:
-# _project_dihedrals wraps angles into (-180, 180], so a target past 180 deg
-# aliases to a negative angle and folds the crease backwards. Never exceed 1.0.
-# It only became reachable once self-collision became vertex-vs-triangle (see
-# VT_* below) — with the old vertex-pair repulsion the large grids phased badly
-# before getting here, which is what used to force CAP down per preset.
+CAP = 0.80  # fraction of each crease's declared angle driven at foldness=1.
+# NOT 1.0, and the reason is CRUMPLING, not self-intersection. Past ~0.85 the
+# sheet stops turning coherently: measured on 23x23 at CAP=1.0 the innermost
+# ring twists +8 deg while every ring outside it twists -17..-38, i.e. the
+# centre fights the wrap instead of joining it, and the within-ring rotation
+# spread jumps from 12 deg to 25. Facet flex and strain climb with it (1.8 ->
+# 3.5 deg, 5.5% -> 10.1%). That incoherence is exactly what reads as a crumple.
+# 0.80 keeps every ring turning the same way with a tight spread. 1.0 is a hard
+# ceiling regardless — _project_dihedrals wraps angles into (-180, 180], so a
+# target past 180 deg aliases to a negative angle and folds the crease backward.
 
 # SUBSTEPS — PBD settle passes per frame, scaled UP with ring count: a bigger
 # sheet needs more folding applied, because the fold propagates outward from
@@ -127,6 +130,30 @@ VT_FLAT_EXCLUDE = 1.6  # ignore triangles this close in the FLAT sheet — those
 
 SEED_KICK = 0.01  # tiny random z offset on the flat seed so the first fold
 # step has a direction to break out of the perfectly-flat plane
+
+# SEED_SWIRL — the sheet has TWO ways to get smaller, and without a nudge it
+# picks the wrong one. It can spiral (every ring turning about the hub, the way
+# a real flasher collapses) or it can just crush inward radially, which buckles
+# the rings and reads as CRUMPLING. Both are near-symmetric solutions to the
+# same constraints, so a random z seed leaves the choice to noise and the crush
+# usually wins: measured twist per ring was +25 +16 +5 +2 -0 -2, i.e. the rim
+# barely rotated at all while the inner rings buckled (spread 25 deg).
+#
+# Seeding a small COHERENT rotation, growing with radius, breaks that symmetry
+# toward the spiral. It is only a seed — a few degrees on the flat sheet, which
+# the length projection immediately cleans up — not a prescribed motion; the
+# crease pattern still decides the final shape.
+# Radians of twist accumulated at the sheet edge over the whole fold. Applied
+# INCREMENTALLY as foldness advances, never all at once — the wrap winds up as
+# the pleats close, the way real paper does, and frame 0 stays perfectly flat.
+# Negative winds the sheet so that |rotation| GROWS outward, which is the
+# real spiral: measured 23x23 twist per ring -13 -35 -42 -44 -46 -48. Positive
+# instead spins the inner rings hardest (+44 +29 +20 ...), which is not a wrap.
+# Bigger sheets get more, having more rings to wind. This also LOWERS strain
+# (23x23: 7.45% -> 6.89%), confirming the spiral is the lower-energy mode the
+# solver was previously failing to find rather than something forced on it.
+SEED_SWIRL_SMALL = -0.5  # rings <= 4
+SEED_SWIRL_LARGE = -1.0
 
 
 class FlasherFoldSolver:
@@ -208,6 +235,9 @@ class FlasherFoldSolver:
         else:
             self.substeps = SUBSTEPS_SMALL
             self.vt_thickness = VT_THICKNESS_DEFAULT
+        # Small sheets have fewer rings to wind, and over-swirling them just
+        # bends facets instead of turning rings (7x7 facet flex 5.2 -> 7.0 deg).
+        self.swirl = SEED_SWIRL_SMALL if rings <= 4 else SEED_SWIRL_LARGE
         # Flat-space centroid of every face, used to skip a vertex's own
         # neighbourhood in the vertex-triangle test (those panels share creases
         # and are supposed to touch).
@@ -422,9 +452,25 @@ class FlasherFoldSolver:
         X = self.flat.copy()
         X[:, 2] += SEED_KICK * rng.standard_normal(self.V)
         X[self.pinned, 2] = 0.0
+        # Per-vertex swirl rate, applied INCREMENTALLY as the fold progresses
+        # (see SEED_SWIRL). Applying it all at t=0 would snap the sheet into a
+        # twist before it has begun folding; growing it with foldness is both
+        # smooth and what the paper actually does — the wrap winds up as the
+        # pleats close.
+        ring = np.maximum(np.abs(self.flat[:, 0]), np.abs(self.flat[:, 1]))
+        swirl_rate = self.swirl * (ring / max(ring.max(), 1e-9))
+        swirl_rate[self.pinned] = 0.0
+        prev_frac = 0.0
         for step in range(1, STEPS + 1):
             t = step / STEPS
             frac = self._smoothstep(t)
+            if self.swirl:
+                a = swirl_rate * (frac - prev_frac)
+                ca, sa = np.cos(a), np.sin(a)
+                x, y = X[:, 0].copy(), X[:, 1].copy()
+                X[:, 0] = ca * x - sa * y
+                X[:, 1] = sa * x + ca * y
+            prev_frac = frac
             for _ in range(self.substeps):
                 self._project_lengths(X)
                 self._project_dihedrals(X, frac)  # creases dominate the shape
