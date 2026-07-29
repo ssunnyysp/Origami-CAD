@@ -62,14 +62,21 @@ STEPS = 60  # foldness samples returned (frames = STEPS + 1)
 # limit of a DIFFERENT gate, and the binding gate changes with sheet size:
 #
 #   rings  preset  cap   sub  swirl   wrap   bound by
-#   <=4    7x7     0.94    8   -0.8   0.486  facet flex (7.9 deg; only 3 rings
+#   <=4    7x7     0.90    8   -0.8   0.488  facet flex (8.0 deg; only 3 rings
 #                                            share the bending, so cells smear
 #                                            before anything else gives)
-#   5-8    15x15   1.00   12   -1.5   0.494  stow height (1.72 of 1.75)
-#   9-12   23x23   1.00   16   -1.5   0.556  strain / dishing
-#   >=13   31x31   0.95   24   -1.5   0.615  strain + dishing (sub 28 -> the
-#                                            centre sinks -0.55 and height 1.84)
-#   >=17   (none)  0.90   24   -1.5          strain, for grids past any preset
+#   5-8    15x15   0.97   12   -1.5   0.469  STRAIN (9.8%)
+#   9-12   23x23   0.94   16   -1.5   0.545  STRAIN (9.9%)
+#   >=13   31x31   0.92   24   -1.5   0.585  STRAIN (9.8%)
+#   >=17   (none)  0.84   24   -1.5   0.693  STRAIN, for grids past any preset
+#
+# STRAIN IS NOW THE BINDING GATE ON EVERY GRID BUT THE SMALLEST, and ~10% mean
+# is the line. It is not a cosmetic limit: pushing past it visibly CRUMPLES.
+# Measured at 23x23 cap 1.0 / DIHEDRAL_ITERS 8 the wrap improves to 0.499 and
+# every other metric still passes — rotation coherent, stow flat, zero phasing —
+# but mean strain hits 11.1% and the rendered model comes out with a jagged rim
+# and chewed-up facets. Wrap, height, phasing and even the twist profile all
+# fail to catch that; only strain does. Do not trade strain for wrap here.
 #
 # CAP is the fraction of each crease's declared angle driven at foldness=1, and
 # its ceiling is CRUMPLING, not self-intersection: past the limit the innermost
@@ -91,14 +98,14 @@ STEPS = 60  # foldness samples returned (frames = STEPS + 1)
 #
 # Rows are (min_rings, cap, substeps, swirl, layer_thickness), highest first.
 FOLD_PROFILE = (
-    (17, 0.90, 24, -1.5, 0.25),
-    (13, 0.95, 24, -1.5, 0.25),
-    (9, 1.00, 16, -1.5, 0.35),
-    (5, 1.00, 12, -1.5, 0.35),
-    (0, 0.94, 8, -0.8, 0.35),
+    (17, 0.84, 24, -1.5, 0.25),
+    (13, 0.92, 24, -1.5, 0.25),
+    (9, 0.94, 16, -1.5, 0.35),
+    (5, 0.97, 12, -1.5, 0.35),
+    (0, 0.90, 8, -0.8, 0.35),
 )
 
-DIHEDRAL_ITERS = 6  # dihedral projection iterations per substep (run last so
+DIHEDRAL_ITERS = 8  # dihedral projection iterations per substep (run last so
 # the crease pattern dominates the settled shape)
 LENGTH_ITERS = 4
 LENGTH_RELAX = 0.8  # near-inextensible, soft enough not to oscillate
