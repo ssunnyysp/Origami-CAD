@@ -99,7 +99,7 @@ from the pinned hub one ring at a time.
 
 Every preset measures zero true self-intersection across the whole sweep, 98–100%
 mountain/valley sign fidelity, a coherent spiral (rotation growing outward, ~61–77° at
-the rim), and a stow height of 1.1–1.7 units against a flat-sheet cell size of 1.0. Edge
+the rim), and a stow height of 1.1–1.8 units against a flat-sheet cell size of 1.0. Edge
 strain runs ~7–9%: the pattern is not perfectly rigidly foldable (a 45° diagonal can't
 span a non-square region corner-to-corner — see the generator's docstring), so some of
 that incompatibility has to go somewhere. See `solver.py`'s module docstring for the full
@@ -141,8 +141,8 @@ interchange format used by Origami Simulator, Rabbit Ear, and academic rigid-ori
 
 - The pattern does not rigidly close to an exact box (see "How folding works" above) —
   this is a geometric property of the current pattern, verified directly, not a bug.
-- Larger presets take longer to solve: roughly 1s / 4s / 12s / 31s for 7×7 / 15×15 / 23×23
-  / 31×31. The result is cached per parameter set, so this cost is paid once per preset
+- Larger presets take longer to solve: roughly 2s / 20s / 55s / 81s for 7×7 / 15×15 / 23×23
+  / 31×31 — the deep fold needs many settling passes. The result is cached per parameter set, so this cost is paid once per preset
   rather than per frame, and the UI shows a "Solving fold…" state meanwhile.
 - `backend/app/flasher/fold_engine.py` is unused dead code left over from an earlier
   kinematic-wrap approach that the current solver replaced — not imported anywhere.

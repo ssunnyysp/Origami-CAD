@@ -61,14 +61,22 @@ STEPS = 60  # foldness samples returned (frames = STEPS + 1)
 # ring count. These are NOT free parameters — each row sits at the measured
 # limit of a DIFFERENT gate, and the binding gate changes with sheet size:
 #
-#   rings  preset  cap   sub  swirl   wrap   bound by
-#   <=4    7x7     0.90    8   -0.8   0.488  facet flex (8.0 deg; only 3 rings
-#                                            share the bending, so cells smear
-#                                            before anything else gives)
-#   5-8    15x15   0.97   12   -1.5   0.469  STRAIN (9.8%)
-#   9-12   23x23   0.94   16   -1.5   0.545  STRAIN (9.9%)
-#   >=13   31x31   0.92   24   -1.5   0.585  STRAIN (9.8%)
-#   >=17   (none)  0.84   24   -1.5   0.693  STRAIN, for grids past any preset
+#   rings  preset  cap   sub  swirl  dih   wrap   bound by
+#   <=4    7x7     0.95   12   -1.5   12   0.404  facet flex (only 3 rings share
+#                                                 the bending, so cells smear)
+#   5-8    15x15   1.00   24   -2.5   16   0.345  strain
+#   9-12   23x23   0.96   32   -2.5   16   0.348  strain
+#   >=13   31x31   0.85   32   -2.5   16   0.501  strain
+#   >=17   (none)  0.80   32   -2.5   16          strain, past any preset
+#
+# THREE THINGS HAD TO MOVE TOGETHER to get the fold this deep; changing one
+# alone regresses. (a) DIHEDRAL_ITERS 8 -> 16 is what actually closes the
+# pleats: they were stalling at 128 deg against a 165 deg target, so the
+# accordion was only half collapsed. (b) SUBSTEPS up, because more settling
+# LOWERS strain and strain is the wall. (c) SEED_SWIRL -1.5 -> -2.5, because
+# driving deeper re-introduced the inner-ring sign flip (the crumple) and only
+# a stronger swirl holds the spiral together at this depth. Measured on 15x15
+# at dih 16: swirl -1.5 flips, -2.5 is clean AND lower strain (10.5 -> 9.7).
 #
 # STRAIN IS NOW THE BINDING GATE ON EVERY GRID BUT THE SMALLEST, and ~10% mean
 # is the line. It is not a cosmetic limit: pushing past it visibly CRUMPLES.
@@ -96,17 +104,17 @@ STEPS = 60  # foldness samples returned (frames = STEPS + 1)
 # fold (see below). Small sheets take less: over-swirling a 7x7 bends facets
 # instead of turning rings.
 #
-# Rows are (min_rings, cap, substeps, swirl, layer_thickness), highest first.
+# Rows are (min_rings, cap, substeps, swirl, thickness, dihedral_iters).
 FOLD_PROFILE = (
-    (17, 0.84, 24, -1.5, 0.25),
-    (13, 0.92, 24, -1.5, 0.25),
-    (9, 0.94, 16, -1.5, 0.35),
-    (5, 0.97, 12, -1.5, 0.35),
-    (0, 0.90, 8, -0.8, 0.35),
+    (17, 0.80, 32, -2.5, 0.25, 16),
+    (13, 0.85, 32, -2.5, 0.25, 16),
+    (9, 0.96, 32, -2.5, 0.35, 16),
+    (5, 1.00, 24, -2.5, 0.35, 16),
+    (0, 0.95, 12, -1.5, 0.35, 12),
 )
 
-DIHEDRAL_ITERS = 8  # dihedral projection iterations per substep (run last so
-# the crease pattern dominates the settled shape)
+# Dihedral projection iterations per substep is PER PRESET (see FOLD_PROFILE);
+# this is only the fallback. It is the lever that actually closes the pleats.
 LENGTH_ITERS = 4
 LENGTH_RELAX = 0.8  # near-inextensible, soft enough not to oscillate
 
@@ -245,12 +253,13 @@ class FlasherFoldSolver:
 
         rings = max(pattern.ring_count, 1)
         # Per-preset fold profile (see FOLD_PROFILE above).
-        for min_rings, cap, subs, swirl, thick in FOLD_PROFILE:
+        for min_rings, cap, subs, swirl, thick, dih in FOLD_PROFILE:
             if rings >= min_rings:
                 self.cap = cap
                 self.substeps = subs
                 self.swirl = swirl
                 self.vt_thickness = thick
+                self.dihedral_iters = dih
                 break
 
         # Flat-space centroid of every face, used to skip a vertex's own
@@ -300,7 +309,7 @@ class FlasherFoldSolver:
         w[self.pinned] = 0.0
         w1, w2, w3, w4 = w[self.hi], w[self.hj], w[self.hk], w[self.hl]
         hw = self.hinge_weight
-        for _ in range(DIHEDRAL_ITERS):
+        for _ in range(self.dihedral_iters):
             th, g1, g2, g3, g4 = self._dihedral(X)
             err = np.mod(th - target + math.pi, 2 * math.pi) - math.pi
             err *= hw
