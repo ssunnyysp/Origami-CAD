@@ -64,10 +64,17 @@ STEPS = 60  # foldness samples returned (frames = STEPS + 1)
 #   rings  preset  cap   sub  swirl  dih   wrap   bound by
 #   <=4    7x7     0.95   12   -1.5   12   0.404  facet flex (only 3 rings share
 #                                                 the bending, so cells smear)
-#   5-8    15x15   1.00   24   -2.5   16   0.345  strain
-#   9-12   23x23   0.96   32   -2.5   16   0.348  strain
-#   >=13   31x31   0.85   32   -2.5   16   0.501  strain
-#   >=17   (none)  0.80   32   -2.5   16          strain, past any preset
+#   5-8    15x15   1.00   32   -3.0   24   0.345  PLATEAU — cap is already 1.0 and
+#                                                 dih 32/48 give the identical
+#                                                 0.344, so this is the pattern's
+#                                                 own limit, not a tuning gap
+#   9-12   23x23   1.00   40   -2.5   24   0.328  strain
+#   >=13   31x31   0.95   48   -3.0   24   0.366  strain
+#   >=17   (none)  0.88   48   -3.0   24          strain, past any preset
+#
+# SEED_SWIRL is capped at -3.0 on purpose: past that the rim turns more than
+# 180 deg and the coherence metric (a circular mean) aliases, so a healthy fold
+# starts reading as a sign flip. Keep it <= 3.0 or the crumple check goes blind.
 #
 # THREE THINGS HAD TO MOVE TOGETHER to get the fold this deep; changing one
 # alone regresses. (a) DIHEDRAL_ITERS 8 -> 16 is what actually closes the
@@ -106,10 +113,10 @@ STEPS = 60  # foldness samples returned (frames = STEPS + 1)
 #
 # Rows are (min_rings, cap, substeps, swirl, thickness, dihedral_iters).
 FOLD_PROFILE = (
-    (17, 0.80, 32, -2.5, 0.25, 16),
-    (13, 0.85, 32, -2.5, 0.25, 16),
-    (9, 0.96, 32, -2.5, 0.35, 16),
-    (5, 1.00, 24, -2.5, 0.35, 16),
+    (17, 0.88, 48, -3.0, 0.25, 24),
+    (13, 0.95, 48, -3.0, 0.25, 24),
+    (9, 1.00, 40, -2.5, 0.35, 24),
+    (5, 1.00, 32, -3.0, 0.35, 24),
     (0, 0.95, 12, -1.5, 0.35, 12),
 )
 
