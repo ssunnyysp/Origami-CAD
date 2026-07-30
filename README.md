@@ -29,9 +29,11 @@ backend/    FastAPI — presets, crease-pattern generation, and the fold solver
 The fold solver is too expensive to run at animation rate in the browser, and the
 client has zero fold logic. Instead the backend solves the **entire fold trajectory
 once** per parameter set: `POST /api/flasher/geometry` returns the crease pattern plus
-61 frames of vertex positions (foldness 0.00 → 1.00). The frontend linearly interpolates
-between adjacent frames at render time, so dragging the slider or animating is pure
-client-side lerp with zero network traffic per frame — a new request only fires when the
+121 frames of vertex positions (foldness 0.00 → 1.00). The frontend interpolates between
+adjacent frames at render time with a Catmull-Rom spline (C1-continuous, so the motion has
+no velocity kinks at frame boundaries — a linear lerp was visibly jerky at this fold depth).
+Dragging the slider or animating is therefore pure client-side interpolation with zero
+network traffic per frame — a new request only fires when the
 structural parameters (grid size, etc.) change, and `GeometryRequest` is `@lru_cache`d
 server-side so re-selecting a previously-seen preset is free.
 
@@ -141,7 +143,7 @@ interchange format used by Origami Simulator, Rabbit Ear, and academic rigid-ori
 
 - The pattern does not rigidly close to an exact box (see "How folding works" above) —
   this is a geometric property of the current pattern, verified directly, not a bug.
-- Larger presets take longer to solve: roughly 1s / 39s / 100s / 131s for 7×7 / 15×15 / 23×23 / 31×31 — the deep fold
+- Larger presets take longer to solve: roughly 1s / 36s / 93s / 128s for 7×7 / 15×15 / 23×23 / 31×31 — the deep fold
   needs many settling passes, and this is the main cost of how compact the stow is.
   `FOLD_PROFILE` in `solver.py` trades the two against each other. The result is cached per parameter set, so this cost is paid once per preset
   rather than per frame, and the UI shows a "Solving fold…" state meanwhile.

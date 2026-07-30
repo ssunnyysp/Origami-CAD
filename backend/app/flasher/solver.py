@@ -47,7 +47,16 @@ from scipy.spatial import cKDTree
 
 from .generator import HUB_HALF, CreasePattern, FlasherParams
 
-STEPS = 60  # foldness samples returned (frames = STEPS + 1)
+STEPS = 120  # foldness samples returned (frames = STEPS + 1)
+# 120, not 60, for ANIMATION SMOOTHNESS. The frontend lerps between adjacent
+# frames, so each frame is a straight-line segment and the kink between
+# segments is what reads as jumpiness. At this fold depth the sheet moves up to
+# ~1.2 units (more than a full grid cell) between 60-step frames, which is very
+# visible. Doubling the frame count halves the segment length. It is FREE in
+# solve time because the per-frame substep counts in FOLD_PROFILE were halved
+# to match: total work is STEPS x substeps, and at constant total work the fold
+# comes out identical (measured on 15x15: wrap 0.323, strain 10.2, height 1.40
+# at both 60x48 and 120x24) while max per-frame motion drops 1.16 -> 0.97.
 
 # THE STOW MUST STAY FLAT. The flasher compresses radially into a low disc
 # sitting just under the hub plane; it must not dome, cone, or grow into a
@@ -61,18 +70,25 @@ STEPS = 60  # foldness samples returned (frames = STEPS + 1)
 # ring count. These are NOT free parameters — each row sits at the measured
 # limit of a DIFFERENT gate, and the binding gate changes with sheet size:
 #
-#   rings  preset  cap   sub  swirl  dih   wrap   bound by
-#   <=4    7x7     0.95   12   -1.5   12   0.404  facet flex (only 3 rings share
-#                                                 the bending, so cells smear)
-#   5-8    15x15   1.00   48   -3.0   32   0.334  PLATEAU — cap is already 1.0 and
-#                                                 more substeps/iters move it by
-#                                                 <0.005, so this is the pattern's
-#                                                 own limit, not a tuning gap
-#   9-12   23x23   1.00   56   -2.5   32   0.315  strain (also near plateau)
-#   >=13   31x31   1.00   40   -3.0   32   0.306  flatness — at 48 substeps it
-#                                                 reaches 0.291 but the stow grows
-#                                                 to 1.77 and the centre dishes
-#   >=17   (none)  0.90   40   -3.0   32          strain, past any preset
+#   rings  preset  cap  sub  swirl  dih  thick  wrap   bound by
+#   <=4    7x7     1.00   6   -1.5   12   0.14   0.340  facet flex
+#   5-8    15x15   1.00  24   -3.0   32   0.20   0.282  facet flex / strain
+#   9-12   23x23   1.00  28   -2.5   32   0.26   0.285  strain
+#   >=13   31x31   1.00  20   -3.0   32   0.25   0.290  strain
+#   >=17   (none)  0.90  20   -3.0   32   0.25          strain, past any preset
+#
+# LAYER THICKNESS IS A REAL COMPACTION LEVER on the small and mid grids, which
+# is the opposite of what it does on the largest. A few rings stacked at 0.35
+# thickness IS the folded radius: the 7x7 sat at folded radius 2.0 with ~6
+# layers x 0.35 = 2.1, i.e. thickness-bound, not crease-bound. Thinning it to
+# 0.14 took that preset from 0.404 to 0.340 and LOWERED strain (7.2% -> 6.5%).
+# The 31x31 behaves the other way — thinner is worse there (0.290 at 0.25 vs
+# 0.303 at 0.15) — so this is tuned per row, not globally.
+#
+# Facet stiffness was tried as the 7x7's fix and REJECTED: FACET_WEIGHT 2.5 does
+# cure the facet-flex reading (10.2 -> 7.4 deg) but rigid facets resist folding,
+# so wrap got worse (0.404 -> 0.422), and on the 15x15 it was much worse
+# (height 2.23, strain 11.2, centre dished). Thickness was the real lever.
 #
 # SEED_SWIRL is capped at -3.0 on purpose: past that the rim turns more than
 # 180 deg and the coherence metric (a circular mean) aliases, so a healthy fold
@@ -115,11 +131,11 @@ STEPS = 60  # foldness samples returned (frames = STEPS + 1)
 #
 # Rows are (min_rings, cap, substeps, swirl, thickness, dihedral_iters).
 FOLD_PROFILE = (
-    (17, 0.90, 40, -3.0, 0.25, 32),
-    (13, 1.00, 40, -3.0, 0.25, 32),
-    (9, 1.00, 56, -2.5, 0.35, 32),
-    (5, 1.00, 48, -3.0, 0.35, 32),
-    (0, 0.95, 12, -1.5, 0.35, 12),
+    (17, 0.90, 20, -3.0, 0.25, 32),
+    (13, 1.00, 20, -3.0, 0.25, 32),
+    (9, 1.00, 28, -2.5, 0.26, 32),
+    (5, 1.00, 24, -3.0, 0.20, 32),
+    (0, 1.00, 6, -1.5, 0.14, 12),
 )
 
 # Dihedral projection iterations per substep is PER PRESET (see FOLD_PROFILE);
