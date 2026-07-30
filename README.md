@@ -141,7 +141,7 @@ interchange format used by Origami Simulator, Rabbit Ear, and academic rigid-ori
 
 - The pattern does not rigidly close to an exact box (see "How folding works" above) —
   this is a geometric property of the current pattern, verified directly, not a bug.
-- Larger presets take longer to solve: roughly 2s / 35s / 100s / 185s for 7×7 / 15×15 / 23×23 / 31×31 — the deep fold
+- Larger presets take longer to solve: roughly 1s / 39s / 100s / 131s for 7×7 / 15×15 / 23×23 / 31×31 — the deep fold
   needs many settling passes, and this is the main cost of how compact the stow is.
   `FOLD_PROFILE` in `solver.py` trades the two against each other. The result is cached per parameter set, so this cost is paid once per preset
   rather than per frame, and the UI shows a "Solving fold…" state meanwhile.

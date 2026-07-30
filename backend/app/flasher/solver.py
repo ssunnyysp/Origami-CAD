@@ -64,13 +64,15 @@ STEPS = 60  # foldness samples returned (frames = STEPS + 1)
 #   rings  preset  cap   sub  swirl  dih   wrap   bound by
 #   <=4    7x7     0.95   12   -1.5   12   0.404  facet flex (only 3 rings share
 #                                                 the bending, so cells smear)
-#   5-8    15x15   1.00   32   -3.0   24   0.345  PLATEAU — cap is already 1.0 and
-#                                                 dih 32/48 give the identical
-#                                                 0.344, so this is the pattern's
+#   5-8    15x15   1.00   48   -3.0   32   0.334  PLATEAU — cap is already 1.0 and
+#                                                 more substeps/iters move it by
+#                                                 <0.005, so this is the pattern's
 #                                                 own limit, not a tuning gap
-#   9-12   23x23   1.00   40   -2.5   24   0.328  strain
-#   >=13   31x31   0.95   48   -3.0   24   0.366  strain
-#   >=17   (none)  0.88   48   -3.0   24          strain, past any preset
+#   9-12   23x23   1.00   56   -2.5   32   0.315  strain (also near plateau)
+#   >=13   31x31   1.00   40   -3.0   32   0.306  flatness — at 48 substeps it
+#                                                 reaches 0.291 but the stow grows
+#                                                 to 1.77 and the centre dishes
+#   >=17   (none)  0.90   40   -3.0   32          strain, past any preset
 #
 # SEED_SWIRL is capped at -3.0 on purpose: past that the rim turns more than
 # 180 deg and the coherence metric (a circular mean) aliases, so a healthy fold
@@ -113,10 +115,10 @@ STEPS = 60  # foldness samples returned (frames = STEPS + 1)
 #
 # Rows are (min_rings, cap, substeps, swirl, thickness, dihedral_iters).
 FOLD_PROFILE = (
-    (17, 0.88, 48, -3.0, 0.25, 24),
-    (13, 0.95, 48, -3.0, 0.25, 24),
-    (9, 1.00, 40, -2.5, 0.35, 24),
-    (5, 1.00, 32, -3.0, 0.35, 24),
+    (17, 0.90, 40, -3.0, 0.25, 32),
+    (13, 1.00, 40, -3.0, 0.25, 32),
+    (9, 1.00, 56, -2.5, 0.35, 32),
+    (5, 1.00, 48, -3.0, 0.35, 32),
     (0, 0.95, 12, -1.5, 0.35, 12),
 )
 
@@ -192,6 +194,24 @@ SEED_KICK = 0.01  # tiny random z offset on the flat seed so the first fold
 # solver was previously failing to find rather than something forced on it.
 
 
+def _cross3(a, b):
+    """3-D cross product without np.cross's axis-handling overhead.
+
+    np.cross spends most of its time in moveaxis bookkeeping; it measured at
+    8s of a 101s solve. This is the same arithmetic, written out.
+    """
+    out = np.empty_like(a)
+    out[:, 0] = a[:, 1] * b[:, 2] - a[:, 2] * b[:, 1]
+    out[:, 1] = a[:, 2] * b[:, 0] - a[:, 0] * b[:, 2]
+    out[:, 2] = a[:, 0] * b[:, 1] - a[:, 1] * b[:, 0]
+    return out
+
+
+def _norm3(a):
+    """Row-wise 2-norm, cheaper than np.linalg.norm's generic dispatch."""
+    return np.sqrt(a[:, 0] * a[:, 0] + a[:, 1] * a[:, 1] + a[:, 2] * a[:, 2])
+
+
 class FlasherFoldSolver:
     def __init__(self, pattern: CreasePattern, params: FlasherParams):
         self.params = params
@@ -243,6 +263,13 @@ class FlasherFoldSolver:
         self.sign, self.mag = np.array(sign), np.array(mag)
         self.hinge_weight = np.array(weight)
         self.real_hinge = self.sign != 0
+        # Flattened hinge-vertex indices and the per-vertex incidence count.
+        # Both are fixed for the whole solve, so the dihedral projection can
+        # scatter with bincount instead of the much slower np.add.at.
+        self.h_all = np.concatenate((self.hi, self.hj, self.hk, self.hl))
+        self.hinge_cnt = np.maximum(
+            np.bincount(self.h_all, minlength=self.V).astype(float), 1.0
+        )
 
         # Edges (for the length constraint) and their flat rest lengths.
         self.ea = np.array([a for a, _ in edge_tris])
@@ -287,15 +314,15 @@ class FlasherFoldSolver:
     def _dihedral(self, X):
         x1, x2, x3, x4 = X[self.hi], X[self.hj], X[self.hk], X[self.hl]
         e = x2 - x1
-        Le = np.linalg.norm(e, axis=1, keepdims=True)
-        n1 = np.cross(x2 - x1, x3 - x1)
-        n2 = np.cross(x4 - x1, x2 - x1)
-        L1 = np.linalg.norm(n1, axis=1, keepdims=True)
-        L2 = np.linalg.norm(n2, axis=1, keepdims=True)
+        Le = _norm3(e)[:, None]
+        n1 = _cross3(x2 - x1, x3 - x1)
+        n2 = _cross3(x4 - x1, x2 - x1)
+        L1 = _norm3(n1)[:, None]
+        L2 = _norm3(n2)[:, None]
         n1u, n2u = n1 / np.maximum(L1, 1e-9), n2 / np.maximum(L2, 1e-9)
         h1, h2 = np.maximum(L1, 1e-9) / Le, np.maximum(L2, 1e-9) / Le
         th = np.arctan2(
-            np.sum(np.cross(n1u, n2u) * (e / Le), axis=1),
+            np.sum(_cross3(n1u, n2u) * (e / Le), axis=1),
             np.clip(np.sum(n1u * n2u, axis=1), -1, 1),
         )
         w1 = (np.sum((x3 - x1) * e, axis=1) / Le[:, 0] ** 2)[:, None]
@@ -327,12 +354,22 @@ class FlasherFoldSolver:
                 + w4 * np.sum(g4 * g4, axis=1)
             )
             lam = err / np.maximum(denom, 1e-9)
-            dX = np.zeros_like(X)
-            cnt = np.zeros(self.V)
-            for h, wh, g in ((self.hi, w1, g1), (self.hj, w2, g2), (self.hk, w3, g3), (self.hl, w4, g4)):
-                np.add.at(dX, h, -(lam * wh)[:, None] * g)
-                np.add.at(cnt, h, 1.0)
-            dX /= np.maximum(cnt, 1.0)[:, None]
+            # Scatter-add via bincount, not np.add.at. Identical arithmetic, but
+            # ufunc.at is unbuffered and was 23% of total solve time; bincount
+            # is the vectorised path. `self.hinge_cnt` is precomputed because the
+            # per-vertex hinge incidence never changes during the solve.
+            corr = np.concatenate(
+                (
+                    -(lam * w1)[:, None] * g1,
+                    -(lam * w2)[:, None] * g2,
+                    -(lam * w3)[:, None] * g3,
+                    -(lam * w4)[:, None] * g4,
+                )
+            )
+            dX = np.empty_like(X)
+            for c in range(3):
+                dX[:, c] = np.bincount(self.h_all, weights=corr[:, c], minlength=self.V)
+            dX /= self.hinge_cnt[:, None]
             dX[self.pinned] = 0.0
             X += dX
 
@@ -416,57 +453,62 @@ class FlasherFoldSolver:
         (which is what keeps the stow flat) without the sheet phasing.
         """
         h = self.vt_thickness
+        # Candidate pairs are found ONCE per call, then the projection iterates
+        # on them. Rebuilding both KD-trees inside the iteration loop cost ~a
+        # third of total solve time, and it bought nothing: the search radius
+        # already carries a triangle's full reach as margin, so the candidate
+        # set stays valid across the small corrections these passes apply.
+        tris = X[self.face_vids]
+        cent = tris.mean(axis=1)
+        # ALL triangles within reach, not the K nearest. A K-nearest search
+        # fails exactly where it matters: on a fine grid the K closest
+        # triangles to a vertex are all in its own flat neighbourhood (which
+        # is excluded below), so the penetrating layer never gets tested.
+        pairs = cKDTree(X).sparse_distance_matrix(
+            cKDTree(cent), self.tri_reach + h, output_type="ndarray"
+        )
+        if len(pairs) == 0:
+            return
+        vi = pairs["i"].astype(np.intp)
+        fi = pairs["j"].astype(np.intp)
+        # skip the vertex's own neighbourhood in the FLAT sheet
+        far_flat = (
+            np.linalg.norm(self.flat[vi, :2] - self.face_flat_cent[fi], axis=1)
+            > VT_FLAT_EXCLUDE
+        )
+        vi, fi = vi[far_flat], fi[far_flat]
+        if len(vi) == 0:
+            return
         for _ in range(VT_ITERS):
-            tris = X[self.face_vids]
-            cent = tris.mean(axis=1)
-            # ALL triangles within reach, not the K nearest. A K-nearest search
-            # fails exactly where it matters: on a fine grid the K closest
-            # triangles to a vertex are all in its own flat neighbourhood (which
-            # is excluded below), so the penetrating layer never gets tested.
-            pairs = cKDTree(X).sparse_distance_matrix(
-                cKDTree(cent), self.tri_reach + h, output_type="ndarray"
-            )
-            if len(pairs) == 0:
-                return
-            vi = pairs["i"].astype(np.intp)
-            fi = pairs["j"].astype(np.intp)
-            # skip the vertex's own neighbourhood in the FLAT sheet
-            far_flat = (
-                np.linalg.norm(self.flat[vi, :2] - self.face_flat_cent[fi], axis=1)
-                > VT_FLAT_EXCLUDE
-            )
-            vi, fi = vi[far_flat], fi[far_flat]
-            if len(vi) == 0:
-                return
             a, b, c = X[self.face_vids[fi, 0]], X[self.face_vids[fi, 1]], X[self.face_vids[fi, 2]]
             p = X[vi]
             q, wa, wb, wc = self._closest_on_tri(p, a, b, c)
             d = p - q
-            dist = np.linalg.norm(d, axis=1)
+            dist = _norm3(d)
             hit = dist < h
             if not hit.any():
                 return
+            # narrow to the actual contacts; later passes only revisit those
             vi, fi = vi[hit], fi[hit]
             d, dist = d[hit], dist[hit]
             wa, wb, wc = wa[hit], wb[hit], wc[hit]
             # degenerate (vertex exactly on the facet): use the facet normal
-            nrm = np.cross(b[hit] - a[hit], c[hit] - a[hit])
-            nl = np.linalg.norm(nrm, axis=1, keepdims=True)
+            nrm = _cross3(b[hit] - a[hit], c[hit] - a[hit])
+            nl = _norm3(nrm)[:, None]
             n = np.where(
                 dist[:, None] > 1e-9, d / np.maximum(dist, 1e-9)[:, None], nrm / np.maximum(nl, 1e-9)
             )
             pen = (h - dist)[:, None]
             # split the correction between the vertex and the facet
             corr = 0.5 * pen * n
-            dX = np.zeros_like(X)
-            cnt = np.zeros(self.V)
-            np.add.at(dX, vi, corr)
-            np.add.at(cnt, vi, 1.0)
-            for col, wgt in ((0, wa), (1, wb), (2, wc)):
-                tv = self.face_vids[fi, col]
-                np.add.at(dX, tv, -corr * wgt[:, None])
-                np.add.at(cnt, tv, 1.0)
-            dX /= np.maximum(cnt, 1.0)[:, None]
+            tv0, tv1, tv2 = self.face_vids[fi, 0], self.face_vids[fi, 1], self.face_vids[fi, 2]
+            idx = np.concatenate((vi, tv0, tv1, tv2))
+            vals = np.concatenate((corr, -corr * wa[:, None], -corr * wb[:, None], -corr * wc[:, None]))
+            dX = np.empty_like(X)
+            for ci in range(3):
+                dX[:, ci] = np.bincount(idx, weights=vals[:, ci], minlength=self.V)
+            cnt = np.maximum(np.bincount(idx, minlength=self.V).astype(float), 1.0)
+            dX /= cnt[:, None]
             dX[self.pinned] = 0.0
             X += dX
 
