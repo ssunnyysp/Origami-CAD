@@ -68,7 +68,14 @@ export function Scene({ geometry, foldness, color, roughness, metalness, theme }
     // deterministically — the makeDefault handoff races with controls on
     // first mount and can leave the camera staring into empty space.
     <Canvas
-      camera={{ position: [0, -cameraDistance * 0.7, cameraDistance * 0.7], fov: 45 }}
+      // Deliberately OFF the x = 0 plane. With the camera at x = 0 it sits
+      // exactly inside the YZ grid, which then renders edge-on as a single
+      // line and reads as a missing third axis. A three-quarter view keeps all
+      // three coordinate planes legible from the default framing.
+      camera={{
+        position: [cameraDistance * 0.42, -cameraDistance * 0.6, cameraDistance * 0.6],
+        fov: 45,
+      }}
       onCreated={({ camera }) => camera.lookAt(0, 0, 0)}
     >
       {/* Matches the page's background (see index.css --bg per theme). */}
@@ -86,20 +93,33 @@ export function Scene({ geometry, foldness, color, roughness, metalness, theme }
       <directionalLight position={[5, -6, 8]} intensity={1.5} />
       <directionalLight position={[-6, 4, 3]} intensity={0.5} />
       <ambientLight intensity={0.4} />
-      {/* Baseline reference grid, sitting exactly in the flat sheet's own
-          resting plane (z = 0, the plane the pinned hub never leaves — see
-          solver.py). Left unscaled and unrotated (a THREE.PlaneGeometry lies
-          in the XY plane by default) so it reads as a fixed drafting-table
-          surface: its cell size never changes across presets or imports,
-          only the model's apparent size relative to it does — a stable
-          ruler for "how big is this pattern," not just decoration. */}
+      {/* Reference grids on all three coordinate planes, each passing through
+          the origin, so the scene reads as a 3-D drafting space rather than a
+          single floor: depth, width and height all have a ruler, and the three
+          meet on the axes the model is actually built around.
+
+          The XY plane (unrotated — a THREE.PlaneGeometry lies in XY) is the
+          primary one: it sits exactly in the flat sheet's own resting plane,
+          z = 0, the plane the pinned hub never leaves (see solver.py). The
+          other two are that same grid rotated onto XZ and YZ.
+
+          All three are infinite and share the floor's cell size, so they read
+          as one coherent ruler: cell size never changes across presets or
+          imports, only the model's apparent size against it does.
+
+          Line weights are kept deliberately LIGHT. The two vertical planes
+          pass straight through the model — that is inherent to drawing true
+          coordinate planes rather than backdrop walls — so heavy lines would
+          read as scratches across the paper. The floor carries slightly more
+          weight than the two vertical planes, since it is the plane the sheet
+          actually rests in and the one worth reading distances against. */}
       <Grid
         args={[80, 80]}
         cellSize={2}
-        cellThickness={0.9}
+        cellThickness={0.6}
         cellColor={sceneColors.cell}
         sectionSize={10}
-        sectionThickness={1.3}
+        sectionThickness={0.9}
         sectionColor={sceneColors.section}
         fadeDistance={48}
         fadeStrength={1}
@@ -107,6 +127,36 @@ export function Scene({ geometry, foldness, color, roughness, metalness, theme }
         // drei defaults to BackSide, visible only from -Z; the camera orbits
         // around the +Z side (see the pinned hub's z=0 plane above) and the
         // user can orbit underneath too, so both sides need to render.
+        side={DoubleSide}
+      />
+      {/* XZ plane (y = 0) — height × depth, through the origin. */}
+      <Grid
+        args={[80, 80]}
+        rotation={[-Math.PI / 2, 0, 0]}
+        cellSize={2}
+        cellThickness={0.45}
+        cellColor={sceneColors.cell}
+        sectionSize={10}
+        sectionThickness={0.7}
+        sectionColor={sceneColors.section}
+        fadeDistance={48}
+        fadeStrength={1}
+        infiniteGrid
+        side={DoubleSide}
+      />
+      {/* YZ plane (x = 0) — height × width, through the origin. */}
+      <Grid
+        args={[80, 80]}
+        rotation={[0, Math.PI / 2, Math.PI / 2]}
+        cellSize={2}
+        cellThickness={0.45}
+        cellColor={sceneColors.cell}
+        sectionSize={10}
+        sectionThickness={0.7}
+        sectionColor={sceneColors.section}
+        fadeDistance={48}
+        fadeStrength={1}
+        infiniteGrid
         side={DoubleSide}
       />
       <FoldAnimator />
