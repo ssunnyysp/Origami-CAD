@@ -1,5 +1,5 @@
 import { Canvas } from "@react-three/fiber";
-import { Grid, OrbitControls } from "@react-three/drei";
+import { Grid, Line, OrbitControls } from "@react-three/drei";
 import { DoubleSide } from "three";
 import type { FlasherGeometry } from "../../model/types";
 import type { Theme } from "../../store/useAppStore";
@@ -43,6 +43,21 @@ const SCENE_COLORS: Record<
   },
 };
 
+// Origin axis rays. Length is set against the 16-unit normalized sheet below:
+// long enough to read past the flat sheet's edge (8 units) so the X and Y rays
+// stay visible when the model is unfolded, without running off to the horizon.
+const AXIS_LENGTH = 11;
+
+// Standard CAD/3-D convention — X red, Y green, Z blue — so the orientation is
+// readable without a legend. Toned down from three.js's pure 0xff0000 primaries,
+// which are harsh against this stage grey.
+//
+// Z is deliberately a bright CYAN-leaning blue, not the mid blue you would
+// reach for first: the grid's section lines are already #3b82f6, and a
+// conventional axis blue sat close enough to them to be unreadable as a
+// separate thing. This keeps the RGB convention while staying distinct.
+const AXIS_COLORS = { x: "#e5484d", y: "#3fa551", z: "#38bdf8" };
+
 // 16 units across regardless of the pattern's own coordinate scale — matches
 // whatever the flat generated flasher used to normalize to (gridDivisions
 // units across), generalized so an imported FOLD file (arbitrary units) gets
@@ -61,6 +76,7 @@ export function Scene({ geometry, foldness, color, roughness, metalness, theme }
   // is scale-normalized to a 16-unit sheet and the camera stays fixed.
   const cameraDistance = 34;
   const sceneColors = SCENE_COLORS[theme];
+
 
   return (
     // Camera via the Canvas prop (not drei's <PerspectiveCamera makeDefault>):
@@ -158,6 +174,40 @@ export function Scene({ geometry, foldness, color, roughness, metalness, theme }
         fadeStrength={1}
         infiniteGrid
         side={DoubleSide}
+      />
+      {/* Origin axis rays (X red, Y green, Z blue), giving the three grid
+          planes an unambiguous shared origin.
+
+          drei's <Line>, not three's AxesHelper: WebGL ignores LineBasicMaterial's
+          `linewidth` (it is always 1px), so the helper's rays were lost among
+          the grid lines. <Line> is mesh-backed and takes a real world-space
+          width. Depth testing is left ON — these are reference geometry, not a
+          HUD overlay, so the folded paper should occlude the parts it sits in
+          front of. The rays outrun the stowed model (radius ~3 units) in every
+          direction, so orientation stays readable at full fold. */}
+      <Line
+        points={[
+          [0, 0, 0],
+          [AXIS_LENGTH, 0, 0],
+        ]}
+        color={AXIS_COLORS.x}
+        lineWidth={1.8}
+      />
+      <Line
+        points={[
+          [0, 0, 0],
+          [0, AXIS_LENGTH, 0],
+        ]}
+        color={AXIS_COLORS.y}
+        lineWidth={1.8}
+      />
+      <Line
+        points={[
+          [0, 0, 0],
+          [0, 0, AXIS_LENGTH],
+        ]}
+        color={AXIS_COLORS.z}
+        lineWidth={1.8}
       />
       <FoldAnimator />
       <group scale={modelScale(geometry)}>
