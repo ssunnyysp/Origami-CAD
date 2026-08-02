@@ -13,6 +13,7 @@ interface Props {
   roughness: number;
   metalness: number;
   theme: Theme;
+  showGrid: boolean;
 }
 
 // Matches index.css's --stage / --stage-line / --accent per theme. Kept as
@@ -70,7 +71,7 @@ function modelScale(geometry: FlasherGeometry | null): number {
   return maxAbs > 0 ? 16 / (2 * maxAbs) : 1;
 }
 
-export function Scene({ geometry, foldness, color, roughness, metalness, theme }: Props) {
+export function Scene({ geometry, foldness, color, roughness, metalness, theme, showGrid }: Props) {
   // Never remount the Canvas — it blanks the view while the WebGL context and
   // scene rebuild. Instead of moving the camera per preset, the model group
   // is scale-normalized to a 16-unit sheet and the camera stays fixed.
@@ -109,106 +110,113 @@ export function Scene({ geometry, foldness, color, roughness, metalness, theme }
       <directionalLight position={[5, -6, 8]} intensity={1.5} />
       <directionalLight position={[-6, 4, 3]} intensity={0.5} />
       <ambientLight intensity={0.4} />
-      {/* Reference grids on all three coordinate planes, each passing through
-          the origin, so the scene reads as a 3-D drafting space rather than a
-          single floor: depth, width and height all have a ruler, and the three
-          meet on the axes the model is actually built around.
+      {/* All reference geometry behind one switch (see GridToggle): the
+          three coordinate-plane grids and the origin axis rays are a single
+          visual layer, so they appear and disappear together. */}
+      {showGrid && (
+        <>
+        {/* Reference grids on all three coordinate planes, each passing through
+            the origin, so the scene reads as a 3-D drafting space rather than a
+            single floor: depth, width and height all have a ruler, and the three
+            meet on the axes the model is actually built around.
 
-          The XY plane (unrotated — a THREE.PlaneGeometry lies in XY) is the
-          primary one: it sits exactly in the flat sheet's own resting plane,
-          z = 0, the plane the pinned hub never leaves (see solver.py). The
-          other two are that same grid rotated onto XZ and YZ.
+            The XY plane (unrotated — a THREE.PlaneGeometry lies in XY) is the
+            primary one: it sits exactly in the flat sheet's own resting plane,
+            z = 0, the plane the pinned hub never leaves (see solver.py). The
+            other two are that same grid rotated onto XZ and YZ.
 
-          All three are infinite and share the floor's cell size, so they read
-          as one coherent ruler: cell size never changes across presets or
-          imports, only the model's apparent size against it does.
+            All three are infinite and share the floor's cell size, so they read
+            as one coherent ruler: cell size never changes across presets or
+            imports, only the model's apparent size against it does.
 
-          Line weights are kept deliberately LIGHT. The two vertical planes
-          pass straight through the model — that is inherent to drawing true
-          coordinate planes rather than backdrop walls — so heavy lines would
-          read as scratches across the paper. The floor carries slightly more
-          weight than the two vertical planes, since it is the plane the sheet
-          actually rests in and the one worth reading distances against. */}
-      <Grid
-        args={[80, 80]}
-        cellSize={2}
-        cellThickness={0.6}
-        cellColor={sceneColors.cell}
-        sectionSize={10}
-        sectionThickness={0.9}
-        sectionColor={sceneColors.section}
-        fadeDistance={48}
-        fadeStrength={1}
-        infiniteGrid
-        // drei defaults to BackSide, visible only from -Z; the camera orbits
-        // around the +Z side (see the pinned hub's z=0 plane above) and the
-        // user can orbit underneath too, so both sides need to render.
-        side={DoubleSide}
-      />
-      {/* XZ plane (y = 0) — height × depth, through the origin. */}
-      <Grid
-        args={[80, 80]}
-        rotation={[-Math.PI / 2, 0, 0]}
-        cellSize={2}
-        cellThickness={0.45}
-        cellColor={sceneColors.cell}
-        sectionSize={10}
-        sectionThickness={0.7}
-        sectionColor={sceneColors.section}
-        fadeDistance={48}
-        fadeStrength={1}
-        infiniteGrid
-        side={DoubleSide}
-      />
-      {/* YZ plane (x = 0) — height × width, through the origin. */}
-      <Grid
-        args={[80, 80]}
-        rotation={[0, Math.PI / 2, Math.PI / 2]}
-        cellSize={2}
-        cellThickness={0.45}
-        cellColor={sceneColors.cell}
-        sectionSize={10}
-        sectionThickness={0.7}
-        sectionColor={sceneColors.section}
-        fadeDistance={48}
-        fadeStrength={1}
-        infiniteGrid
-        side={DoubleSide}
-      />
-      {/* Origin axis rays (X red, Y green, Z blue), giving the three grid
-          planes an unambiguous shared origin.
+            Line weights are kept deliberately LIGHT. The two vertical planes
+            pass straight through the model — that is inherent to drawing true
+            coordinate planes rather than backdrop walls — so heavy lines would
+            read as scratches across the paper. The floor carries slightly more
+            weight than the two vertical planes, since it is the plane the sheet
+            actually rests in and the one worth reading distances against. */}
+        <Grid
+          args={[80, 80]}
+          cellSize={2}
+          cellThickness={0.6}
+          cellColor={sceneColors.cell}
+          sectionSize={10}
+          sectionThickness={0.9}
+          sectionColor={sceneColors.section}
+          fadeDistance={48}
+          fadeStrength={1}
+          infiniteGrid
+          // drei defaults to BackSide, visible only from -Z; the camera orbits
+          // around the +Z side (see the pinned hub's z=0 plane above) and the
+          // user can orbit underneath too, so both sides need to render.
+          side={DoubleSide}
+        />
+        {/* XZ plane (y = 0) — height × depth, through the origin. */}
+        <Grid
+          args={[80, 80]}
+          rotation={[-Math.PI / 2, 0, 0]}
+          cellSize={2}
+          cellThickness={0.45}
+          cellColor={sceneColors.cell}
+          sectionSize={10}
+          sectionThickness={0.7}
+          sectionColor={sceneColors.section}
+          fadeDistance={48}
+          fadeStrength={1}
+          infiniteGrid
+          side={DoubleSide}
+        />
+        {/* YZ plane (x = 0) — height × width, through the origin. */}
+        <Grid
+          args={[80, 80]}
+          rotation={[0, Math.PI / 2, Math.PI / 2]}
+          cellSize={2}
+          cellThickness={0.45}
+          cellColor={sceneColors.cell}
+          sectionSize={10}
+          sectionThickness={0.7}
+          sectionColor={sceneColors.section}
+          fadeDistance={48}
+          fadeStrength={1}
+          infiniteGrid
+          side={DoubleSide}
+        />
+        {/* Origin axis rays (X red, Y green, Z blue), giving the three grid
+            planes an unambiguous shared origin.
 
-          drei's <Line>, not three's AxesHelper: WebGL ignores LineBasicMaterial's
-          `linewidth` (it is always 1px), so the helper's rays were lost among
-          the grid lines. <Line> is mesh-backed and takes a real world-space
-          width. Depth testing is left ON — these are reference geometry, not a
-          HUD overlay, so the folded paper should occlude the parts it sits in
-          front of. The rays outrun the stowed model (radius ~3 units) in every
-          direction, so orientation stays readable at full fold. */}
-      <Line
-        points={[
-          [0, 0, 0],
-          [AXIS_LENGTH, 0, 0],
-        ]}
-        color={AXIS_COLORS.x}
-        lineWidth={1.8}
-      />
-      <Line
-        points={[
-          [0, 0, 0],
-          [0, AXIS_LENGTH, 0],
-        ]}
-        color={AXIS_COLORS.y}
-        lineWidth={1.8}
-      />
-      <Line
-        points={[
-          [0, 0, 0],
-          [0, 0, AXIS_LENGTH],
-        ]}
-        color={AXIS_COLORS.z}
-        lineWidth={1.8}
-      />
+            drei's <Line>, not three's AxesHelper: WebGL ignores LineBasicMaterial's
+            `linewidth` (it is always 1px), so the helper's rays were lost among
+            the grid lines. <Line> is mesh-backed and takes a real world-space
+            width. Depth testing is left ON — these are reference geometry, not a
+            HUD overlay, so the folded paper should occlude the parts it sits in
+            front of. The rays outrun the stowed model (radius ~3 units) in every
+            direction, so orientation stays readable at full fold. */}
+        <Line
+          points={[
+            [0, 0, 0],
+            [AXIS_LENGTH, 0, 0],
+          ]}
+          color={AXIS_COLORS.x}
+          lineWidth={1.8}
+        />
+        <Line
+          points={[
+            [0, 0, 0],
+            [0, AXIS_LENGTH, 0],
+          ]}
+          color={AXIS_COLORS.y}
+          lineWidth={1.8}
+        />
+        <Line
+          points={[
+            [0, 0, 0],
+            [0, 0, AXIS_LENGTH],
+          ]}
+          color={AXIS_COLORS.z}
+          lineWidth={1.8}
+        />
+        </>
+      )}
       <FoldAnimator />
       <group scale={modelScale(geometry)}>
         <FlasherModel

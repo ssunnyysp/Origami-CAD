@@ -66,6 +66,7 @@ export function AppLayout() {
   const viewMode = useAppStore((s) => s.viewMode);
   const foldness = useAppStore((s) => s.foldness);
   const theme = useAppStore((s) => s.theme);
+  const showGrid = useAppStore((s) => s.showGrid);
   const toggleTheme = useAppStore((s) => s.toggleTheme);
   const paperColor = useAppStore((s) => s.paperColor);
   const roughness = useAppStore((s) => s.roughness);
@@ -105,6 +106,7 @@ export function AppLayout() {
             roughness={roughness}
             metalness={metalness}
             theme={theme}
+            showGrid={showGrid}
           />
         )}
         {/* Always mounted once ready (not just while viewMode === "pattern")

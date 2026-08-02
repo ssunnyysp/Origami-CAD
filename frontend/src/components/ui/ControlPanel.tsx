@@ -4,6 +4,7 @@ import { ModelSelector } from "./ModelSelector";
 import { FoldnessSlider } from "./FoldnessSlider";
 import { AnimateToggle } from "./AnimateToggle";
 import { ColorPicker } from "./ColorPicker";
+import { GridToggle } from "./GridToggle";
 import { FoldImportExport } from "./FoldImportExport";
 
 interface Props {
@@ -35,6 +36,9 @@ export function ControlPanel({ geometry }: Props) {
       <section className="panel-section">
         <h2 className="section-label">Appearance</h2>
         <ColorPicker />
+        {/* Only meaningful for the 3-D scene — the flat crease-pattern view
+            draws no grid, so the switch would be a dead control there. */}
+        {!showingPattern && <GridToggle />}
         <button
           className="action-button action-button--secondary"
           onClick={() => setViewMode(showingPattern ? "3d" : "pattern")}
