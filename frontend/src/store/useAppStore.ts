@@ -5,6 +5,7 @@ import { fetchPresets, importFold } from "../api/client";
 export type Theme = "dark" | "light";
 
 const THEME_STORAGE_KEY = "origami-cad-theme";
+const SHOW_GRID_STORAGE_KEY = "origami-cad-show-grid";
 
 // Dark is the app's default look (see index.css) regardless of OS
 // preference — a user who hasn't chosen yet gets the intended default, but
@@ -13,6 +14,14 @@ function loadStoredTheme(): Theme {
   if (typeof window === "undefined") return "dark";
   const stored = window.localStorage.getItem(THEME_STORAGE_KEY);
   return stored === "light" ? "light" : "dark";
+}
+
+// The reference grid/axes default to ON — they are what makes the folded form
+// readable as a 3-D object at a known scale — but the choice is remembered, so
+// someone who works with them off doesn't have to switch them off every visit.
+function loadStoredShowGrid(): boolean {
+  if (typeof window === "undefined") return true;
+  return window.localStorage.getItem(SHOW_GRID_STORAGE_KEY) !== "off";
 }
 
 // Structural parameters (sides, rings, angles, radii, material response)
@@ -27,6 +36,7 @@ interface AppState {
   animating: boolean;
   viewMode: "3d" | "pattern";
   theme: Theme;
+  showGrid: boolean;
   paperColor: string;
   roughness: number;
   metalness: number;
@@ -52,6 +62,7 @@ interface AppState {
   setPaperColor: (c: string) => void;
   setViewMode: (m: "3d" | "pattern") => void;
   toggleTheme: () => void;
+  setShowGrid: (v: boolean) => void;
   selectPreset: (id: string) => void;
   importFoldFile: (file: File) => Promise<void>;
   selectImportedFrame: (frameIndex: number) => Promise<void>;
@@ -80,6 +91,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   animating: false,
   viewMode: "3d",
   theme: loadStoredTheme(),
+  showGrid: loadStoredShowGrid(),
   paperColor: "#d97757",
   roughness: 0.8,
   metalness: 0.02,
@@ -110,6 +122,11 @@ export const useAppStore = create<AppState>((set, get) => ({
       const theme: Theme = state.theme === "dark" ? "light" : "dark";
       window.localStorage.setItem(THEME_STORAGE_KEY, theme);
       return { theme };
+    }),
+  setShowGrid: (v) =>
+    set(() => {
+      window.localStorage.setItem(SHOW_GRID_STORAGE_KEY, v ? "on" : "off");
+      return { showGrid: v };
     }),
   selectPreset: (id) => {
     const preset = get().presets.find((p) => p.id === id);

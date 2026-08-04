@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from "react";
+import { useEffect, useLayoutEffect, useMemo } from "react";
 import * as THREE from "three";
 import type { CreasePattern } from "../../model/types";
 
@@ -14,30 +14,54 @@ interface Props {
 // one side only, and the two-tone folds are part of the look.
 const PLAIN_PAPER = "#eef0f3";
 
-// One non-indexed geometry for the whole sheet, rebuilt from the solver's
-// vertex positions. Non-indexed so normals stay per-face (flat shading),
-// matching folded paper.
+// One non-indexed geometry for the whole sheet, allocated once and streamed
+// into as the fold advances. Non-indexed so normals stay per-face (flat
+// shading), matching folded paper.
 export function FlasherMesh({ pattern, positions, color, roughness, metalness }: Props) {
-  const geometry = useMemo(() => {
-    const coords: number[] = [];
+  // Draw order: the vertex id for every triangle corner, fan-triangulated from
+  // ids[0] — valid since faces are either triangles or the convex regular-n-gon
+  // central polygon, and it must match the triangulation used for the solver's
+  // constraints. Depends only on the PATTERN, so it survives foldness changes.
+  const order = useMemo(() => {
+    const ids: number[] = [];
     for (const face of pattern.faces) {
-      const ids = face.vertexIds;
-      // Fan triangulation from ids[0] — valid since faces are either
-      // triangles or the convex regular-n-gon central polygon. Must match
-      // the triangulation used for the solver's constraints.
-      for (let i = 1; i < ids.length - 1; i++) {
-        for (const id of [ids[0], ids[i], ids[i + 1]]) {
-          coords.push(positions[id * 3], positions[id * 3 + 1], positions[id * 3 + 2]);
-        }
+      const f = face.vertexIds;
+      for (let i = 1; i < f.length - 1; i++) {
+        ids.push(f[0], f[i], f[i + 1]);
       }
     }
+    return new Uint32Array(ids);
+  }, [pattern]);
+
+  // Keyed on the pattern, NOT on positions. Keying this on `positions` (which
+  // is a fresh Float32Array every frame) meant a new BufferGeometry, a fresh
+  // GPU upload and a dispose on every foldness change — the dominant cost in
+  // the animation loop, and it scaled with grid size.
+  const geometry = useMemo(() => {
     const geom = new THREE.BufferGeometry();
-    geom.setAttribute("position", new THREE.Float32BufferAttribute(coords, 3));
-    geom.computeVertexNormals();
+    geom.setAttribute("position", new THREE.BufferAttribute(new Float32Array(order.length * 3), 3));
+    geom.setAttribute("normal", new THREE.BufferAttribute(new Float32Array(order.length * 3), 3));
     return geom;
-  }, [pattern, positions]);
+  }, [order]);
 
   useEffect(() => () => geometry.dispose(), [geometry]);
+
+  // Stream new vertex positions into the existing buffer. computeVertexNormals
+  // reuses the normal attribute allocated above rather than allocating one.
+  useLayoutEffect(() => {
+    const attr = geometry.getAttribute("position") as THREE.BufferAttribute;
+    const dst = attr.array as Float32Array;
+    for (let i = 0; i < order.length; i++) {
+      const src = order[i] * 3;
+      const out = i * 3;
+      dst[out] = positions[src];
+      dst[out + 1] = positions[src + 1];
+      dst[out + 2] = positions[src + 2];
+    }
+    attr.needsUpdate = true;
+    geometry.computeVertexNormals();
+    geometry.computeBoundingSphere();
+  }, [geometry, order, positions]);
 
   // Two materials over the same geometry: faces wind CCW in the flat pattern,
   // so FrontSide is the sheet's top (the colored side) and BackSide is the

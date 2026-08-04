@@ -1,205 +1,259 @@
-"""Rigid-motion-interpolation fold solver.
+"""Flasher fold solver — forward simulation with the ACCORDION PLEATS leading.
 
-The crease pattern is EXACT: folding every crease to its target dihedral
-angle (180° for pleats, 90° for the wrap's vertical corner bends, signed by
-mountain/valley) closes the sheet into a 1×1×1 box at machine precision —
-checked by a loop-closure oracle (fold every face along a spanning tree
-rooted at the hub; a correct pattern makes every vertex's position agree
-across all its faces, for every odd n).
+The wrap-pinwheel crease pattern folds by the accordion PLEATS in each region
+forming a WAVE — alternating mountain ridges (up) and valley troughs (down) —
+and that wave compressing to wrap the sheet around the central hub. Two rules,
+learned from how the pattern actually folds, make this come out right and are
+the whole reason earlier solvers crumpled instead:
 
-That exactness is the whole foundation of this solver, and it rules out two
-approaches that were tried and failed here first:
+  1. THE PLEATS LEAD, THE DIAGONAL ONLY AIDS. Each region's 45° diagonal is
+     NOT a guiding fold and must not take precedence over the pleats. If the
+     diagonal is driven as hard as the pleats it fights them and the region
+     crumples instead of forming its clean up/down wave. So the diagonal
+     creases are given a small weight (`DIAGONAL_WEIGHT`): they fold only
+     passively, as much as the surrounding pleats leave room for — exactly
+     the "aids the flasher to fold nicely" role. The pleats and the hub-wall
+     bends are driven at full weight and reach their declared angles, so the
+     mountain/valley wave forms crisply (measured: ~100% of pleats fold in
+     their declared direction).
 
-1. TREE-FOLD RECONSTRUCTION PER FRAME (composing hinge rotations along the
-   spanning tree at each frame's PARTIAL fold angle, then averaging
-   disagreeing face copies of each vertex) looks reasonable at a glance —
-   it's exact at t=0 and t=1 — but in between, a flasher sheet is not a
-   rigid mechanism (Lang, J. Mechanisms & Robotics 2016), so different
-   faces reached via different loop paths disagree about a shared vertex's
-   position. Measured directly: at t≈0.3 the disagreement is on the order
-   of 50-75% of the sheet's own size — not a small residual to smooth over,
-   but the dominant signal. Averaging that produces exactly the spiky,
-   self-intersecting crumple this project's users reported ("phasing
-   through", "crunching"); no amount of post-hoc smoothing fixes a target
-   that is itself mostly noise.
-2. PURE DIHEDRAL-ANGLE DYNAMICS FROM THE FLAT SHEET (a force per crease
-   pulling its dihedral angle toward a scheduled target, integrated with
-   damping from t=0) is the right *kind* of model — verified correct on an
-   isolated single hinge — but on the full ~300-hinge network starting from
-   flat, it stalls: mean angle error plateaus around 40° regardless of how
-   much gain, damping, or substep budget is thrown at it. The coupled
-   system can't discover the large coordinated rotate-and-compact motion
-   from purely local torques and a flat start; it needs to already be
-   pointed roughly the right way.
+  2. FACETS STAY (NEARLY) RIGID so the bending happens ON the crease lines.
+     The X-triangulation diagonals inside every cell are held toward flat
+     (`FACET_WEIGHT`), so each cell stays a flat panel and the fold is sharp
+     at the pleats rather than smeared across a wavy surface. A little flex is
+     allowed (the pattern is not perfectly rigidly foldable — Lang, J.
+     Mechanisms Robotics 2016), but only single digits of degrees.
 
-The fix used here combines them so each covers the other's failure mode:
-for each frame, take every face's FULL rigid transform at the exact t=1
-closure (well-defined and mutually consistent, since t=1 provably closes),
-and SLERP each face's rotation from identity toward that fixed target by
-the frame's own schedule fraction (translation is lerped the same way).
-This is closed-form and stable — never touches the noisy partially-tree-
-folded intermediate states above — and it already captures the correct
-large-scale rotate-and-compact motion because it's interpolating toward a
-verified-correct answer. Independently interpolating each face does open
-small seams between adjacent faces (their SLERP curves only agree at the
-endpoints), so a short relaxation pass — the same dihedral-angle force as
-approach (2), now just reconciling a nearly-right guess instead of
-discovering the whole motion — plus edge-length projection and self-
-collision repulsion, cleans that up into a smooth, valid, inextensible
-shape every frame. A displacement rate limit (`MAX_STEP_PER_FRAME`) and
-heavy previous-frame blending keep frame-to-frame motion continuous even
-though each frame's SLERP target is computed independently.
+Method: position-based dynamics, simulated FORWARD from the flat sheet (the
+Origami-Simulator approach). Each frame ramps the crease targets a little
+further, then per substep projects: edge lengths (inextensible), self-
+collision (folded layers stack, don't pass through each other), and finally
+the dihedral targets (creases + facets, weighted as above) LAST so the crease
+pattern dominates. Positions carry forward frame to frame. The hub cell is
+pinned flat as the fixed centre everything wraps around.
 
-Relaxation iteration budget (`relax_substeps`, `length_iters`) scales with
-ring count, since more rings means longer hinge chains and more seam
-residual to reconcile each frame — but it's capped (`MAX_RELAX_SUBSTEPS`,
-`MAX_LENGTH_ITERS`): growing it unboundedly made the largest preset (31x31,
-15 rings) take minutes for diminishing convergence return. Measured on
-this project's four presets, relaxed enough to keep the largest solving in
-well under a minute: the default 7x7 preset converges close to the exact
-1x1x1 stow (final strain ~4%); the 31x31 "Big Bang" preset is smooth and
-self-intersection-free but converges less fully in the time budget (looser,
-not as tightly compacted). `_project_lengths`'s scatter-add uses a
-precomputed sparse incidence matrix rather than `np.add.at`, which
-profiling found to be the dominant per-substep cost (~85% of it) on the
-largest preset — the sparse matvec is the same accumulation, just much
-faster since the mesh topology never changes across iterations.
-
-WHY THE FOLD DOESN'T LOOK LIKE IT'S ROTATING, AND THE FIX: pinning the hub
-(holding it at identity rotation for all t, as this solver's internal
-dynamics does) is a GAUGE CHOICE — the crease constraints only pin down
-each panel's motion *relative to its neighbors*, so which single panel gets
-held fixed while everything else is expressed relative to it is free to
-choose, and rotating that choice can't change any edge length or dihedral
-angle (a global rigid motion is an isometry). Pinning the hub happens to be
-a bad choice for visual clarity here: the exact closure (verified by the
-oracle) shows each ring's rotation *relative to the ring inside it*
-alternates sign — ring 2 sits at -90° relative to ring 1, but ring 3 sits
-at +90° relative to ring 2, landing back near ring 1's own angle. That
-alternation is a real, unavoidable consequence of the accordion pleat
-(adjacent rings must lean opposite ways to stack compactly, the same
-reason bellows pleats alternate) — not a bug, and not fixable by choosing
-different creases. But it means that in the hub-pinned frame, the
-outermost material's NET rotation partially cancels and reads as barely
-rotating at all, even though every individual ring is turning throughout.
-The fix is to stop pinning the hub for *display* purposes: `GLOBAL_SPIN`
-below applies one additional rigid rotation to the entire frame (hub
-included) as a pure post-processing step, monotonically increasing with
-foldness. It never touches the internal solve (seed, relaxation, rate
-limiting all still run in the hub-pinned frame exactly as validated), so it
-can't affect strain, self-intersection, or closure — it only changes which
-gauge the *output* is expressed in, the same free choice a real flasher's
-"twist fold" actuation makes when someone turns the whole assembly by hand.
+Output frames are vertex positions indexed by the generator's original vertex
+ids (the mesh is used welded, as generated — no vertex splitting), which is
+the contract main.py and the frontend consume.
 """
 
 from __future__ import annotations
 
 import math
-from collections import defaultdict, deque
+from collections import defaultdict
 
 import numpy as np
-from scipy import sparse
 from scipy.spatial import cKDTree
-from scipy.spatial.transform import Rotation
 
 from .generator import HUB_HALF, CreasePattern, FlasherParams
 
-STEPS = 60  # foldness samples (frames = STEPS + 1)
-CAP = 170.0 / 180.0  # fraction of the exact stow angles driven at t=1, so
-# stowed layers stay visually separated instead of pressing exactly flat
-BEND_GAIN = 2.0  # dihedral-angle reconciliation force gain
-DT = 0.015
-DAMP = 0.8
-RELAX_SUBSTEPS_PER_RING = 100 / 3  # relaxation substeps per frame, scaled by
-# ring count: more rings means longer hinge chains and more seam residual
-# to reconcile each frame, found by direct measurement across grid sizes.
-# Capped below — growing this unboundedly with ring count makes the
-# largest preset (31x31, 15 rings) take minutes instead of seconds for
-# diminishing convergence return; the cap trades some residual strain on
-# the biggest presets for a solve that finishes in a reasonable time.
-LENGTH_ITERS_PER_RING = 25 / 6  # halved from 25/3: on the wrap-pinwheel
-# pattern (which does not rigidly close — see generator.py's module
-# docstring — real paper flexes to fold it, this solver's rigid triangles
-# don't), _project_lengths ran ~16 correction passes per single dihedral-
-# force kick every substep. That 16:1 imbalance let length correction win
-# tugs-of-war it shouldn't: measured directly, it silently flips a crease's
-# effective fold direction across the mountain/valley (±180°) divide for a
-# meaningful fraction of hinges, since the wrapped angle error always takes
-# the *locally shortest* path back toward the target — which for a hinge
-# already pushed to the wrong side of ±180° is the path that drives it
-# FURTHER wrong, not back. Halving length correction's relative pull (still
-# capped by MAX_LENGTH_ITERS below, so grids at/above ~4 rings are
-# unaffected either way) measurably improves mountain/valley fidelity on the
-# default 7×7 preset (rings=3, the one grid size this constant actually
-# changes) with only a small strain cost.
-MAX_RELAX_SUBSTEPS = 90
-MAX_LENGTH_ITERS = 16
-LENGTH_RELAX = 0.9
-PREV_BLEND = 0.5  # weight of the previous frame when seeding relaxation
-MAX_STEP_PER_FRAME = 0.35  # per-vertex displacement cap between frames —
-# makes a discontinuous jump ("pulse") impossible regardless of how far the
-# raw SLERP target moves in a single foldness step. This is a FLOOR: the
-# effective cap is scaled up with sheet size in __init__ (see
-# self.max_step_per_frame), because a corner of an n×n sheet must travel
-# ~(n/2)·√2 to reach the ~unit-scale stow, and over STEPS frames a fixed 0.35
-# cap budgets only 0.35·STEPS ≈ 21 units of travel — right at the corner
-# distance for the 31×31 preset, so it could never finish folding (the
-# original "big flashers don't fold into a cube" bug). Small sheets keep this
-# exact validated value since the scaled term stays below it for them.
-STEP_BUDGET_MARGIN = 1.5  # rate-limit budget = MARGIN × farthest-vertex travel,
-# so the fold always completes with headroom for the relaxation/blend drag
-MIN_SEPARATION = 0.08  # closest two flat-far vertices are allowed to get
-REPEL_GAIN = 1.0
-REPEL_FLAT_EXCLUDE = 1.6  # skip pairs this close in the FLAT pattern — two
-# sides of the same pleat are meant to swing close together; only pairs far
-# apart in the flat sheet but close in 3-D are genuine self-intersection
+STEPS = 120  # foldness samples returned (frames = STEPS + 1)
+# 120, not 60, for ANIMATION SMOOTHNESS. The frontend lerps between adjacent
+# frames, so each frame is a straight-line segment and the kink between
+# segments is what reads as jumpiness. At this fold depth the sheet moves up to
+# ~1.2 units (more than a full grid cell) between 60-step frames, which is very
+# visible. Doubling the frame count halves the segment length. It is FREE in
+# solve time because the per-frame substep counts in FOLD_PROFILE were halved
+# to match: total work is STEPS x substeps, and at constant total work the fold
+# comes out identical (measured on 15x15: wrap 0.323, strain 10.2, height 1.40
+# at both 60x48 and 120x24) while max per-frame motion drops 1.16 -> 0.97.
 
-GLOBAL_SPIN_DEGREES_PER_RING = 60.0  # display-only rigid spin (see module
-# docstring "WHY THE FOLD DOESN'T LOOK LIKE IT'S ROTATING"): applied to the
-# whole frame, monotonically with foldness, independent of the hub-pinned
-# internal solve. Scales with ring count so more complex folds visibly turn
-# proportionally more, capped so the largest preset doesn't spin too fast
-# to read as a clean rotation.
-MAX_GLOBAL_SPIN_DEGREES = 720.0
+# THE STOW MUST STAY FLAT. The flasher compresses radially into a low disc
+# sitting just under the hub plane; it must not dome, cone, or grow into a
+# tower as it folds. The gate used for every constant here: final-frame z-span
+# within ~0.2 of the flat baseline, the rim (border vertices) staying level,
+# and the radial z-profile flat from hub to rim. It is easy to wrap tighter by
+# letting the model grow tall or dish in the middle — that is a regression,
+# not progress, and it reads as obviously wrong next to real paper.
+
+# How hard each preset is folded, and how it is settled, as a table keyed by
+# ring count. These are NOT free parameters — each row sits at the measured
+# limit of a DIFFERENT gate, and the binding gate changes with sheet size:
+#
+#   rings  preset  cap  sub  swirl  dih  thick  wrap   bound by
+#   <=4    7x7     1.00   6   -1.5   12   0.14   0.340  facet flex
+#   5-8    15x15   1.00  24   -3.0   32   0.20   0.282  facet flex / strain
+#   9-12   23x23   1.00  28   -2.5   32   0.26   0.285  strain
+#   >=13   31x31   1.00  20   -3.0   32   0.25   0.290  strain
+#   >=17   (none)  0.90  20   -3.0   32   0.25          strain, past any preset
+#
+# LAYER THICKNESS IS A REAL COMPACTION LEVER on the small and mid grids, which
+# is the opposite of what it does on the largest. A few rings stacked at 0.35
+# thickness IS the folded radius: the 7x7 sat at folded radius 2.0 with ~6
+# layers x 0.35 = 2.1, i.e. thickness-bound, not crease-bound. Thinning it to
+# 0.14 took that preset from 0.404 to 0.340 and LOWERED strain (7.2% -> 6.5%).
+# The 31x31 behaves the other way — thinner is worse there (0.290 at 0.25 vs
+# 0.303 at 0.15) — so this is tuned per row, not globally.
+#
+# Facet stiffness was tried as the 7x7's fix and REJECTED: FACET_WEIGHT 2.5 does
+# cure the facet-flex reading (10.2 -> 7.4 deg) but rigid facets resist folding,
+# so wrap got worse (0.404 -> 0.422), and on the 15x15 it was much worse
+# (height 2.23, strain 11.2, centre dished). Thickness was the real lever.
+#
+# SEED_SWIRL is capped at -3.0 on purpose: past that the rim turns more than
+# 180 deg and the coherence metric (a circular mean) aliases, so a healthy fold
+# starts reading as a sign flip. Keep it <= 3.0 or the crumple check goes blind.
+#
+# THREE THINGS HAD TO MOVE TOGETHER to get the fold this deep; changing one
+# alone regresses. (a) DIHEDRAL_ITERS 8 -> 16 is what actually closes the
+# pleats: they were stalling at 128 deg against a 165 deg target, so the
+# accordion was only half collapsed. (b) SUBSTEPS up, because more settling
+# LOWERS strain and strain is the wall. (c) SEED_SWIRL -1.5 -> -2.5, because
+# driving deeper re-introduced the inner-ring sign flip (the crumple) and only
+# a stronger swirl holds the spiral together at this depth. Measured on 15x15
+# at dih 16: swirl -1.5 flips, -2.5 is clean AND lower strain (10.5 -> 9.7).
+#
+# STRAIN IS NOW THE BINDING GATE ON EVERY GRID BUT THE SMALLEST, and ~10% mean
+# is the line. It is not a cosmetic limit: pushing past it visibly CRUMPLES.
+# Measured at 23x23 cap 1.0 / DIHEDRAL_ITERS 8 the wrap improves to 0.499 and
+# every other metric still passes — rotation coherent, stow flat, zero phasing —
+# but mean strain hits 11.1% and the rendered model comes out with a jagged rim
+# and chewed-up facets. Wrap, height, phasing and even the twist profile all
+# fail to catch that; only strain does. Do not trade strain for wrap here.
+#
+# CAP is the fraction of each crease's declared angle driven at foldness=1, and
+# its ceiling is CRUMPLING, not self-intersection: past the limit the innermost
+# ring starts turning AGAINST the wrap (measured on 23x23 at cap 1.0 / swirl
+# -1.0: inner +8 deg while every outer ring is -17..-38) and within-ring spread
+# doubles. How far it can go depends on SEED_SWIRL — a stronger swirl stabilises
+# the spiral mode and buys real depth. 1.0 is a hard ceiling regardless, since
+# _project_dihedrals wraps angles into (-180, 180] and a target past 180 deg
+# aliases to a negative angle, folding the crease backward.
+#
+# SUBSTEPS (PBD settle passes per frame) scales up with ring count: the fold
+# propagates outward from the pinned hub one ring at a time. More passes also
+# LOWER strain, which is what lets the mid grids reach cap 1.0 at all. Bounded
+# above by flatness — past these values the interior dishes and the stow grows.
+#
+# SEED_SWIRL is in radians of twist accumulated at the sheet edge over the whole
+# fold (see below). Small sheets take less: over-swirling a 7x7 bends facets
+# instead of turning rings.
+#
+# Rows are (min_rings, cap, substeps, swirl, thickness, dihedral_iters).
+FOLD_PROFILE = (
+    (17, 0.90, 20, -3.0, 0.25, 32),
+    (13, 1.00, 20, -3.0, 0.25, 32),
+    (9, 1.00, 28, -2.5, 0.26, 32),
+    (5, 1.00, 24, -3.0, 0.20, 32),
+    (0, 1.00, 6, -1.5, 0.14, 12),
+)
+
+# Dihedral projection iterations per substep is PER PRESET (see FOLD_PROFILE);
+# this is only the fallback. It is the lever that actually closes the pleats.
+LENGTH_ITERS = 4
+LENGTH_RELAX = 0.8  # near-inextensible, soft enough not to oscillate
+
+# Per-hinge dihedral weights (relative pull toward the hinge's target angle):
+PLEAT_WEIGHT = 1.0  # accordion pleats — lead the fold, form the wave
+WALL_WEIGHT = 1.0  # the four hub-cell wall bends (90°) — lead too
+DIAGONAL_WEIGHT = 0.1  # the region diagonals — PASSIVE aid only, must not
+# take precedence over the pleats (see rule 1 above)
+FACET_WEIGHT = 1.0  # X-triangulation diagonals — held toward flat so cells
+# stay rigid panels and creases fold sharply (see rule 2 above). Full rigidity
+# is viable here ONLY because the diagonal is passive (rule 1): with a leading
+# diagonal, rigid facets used to force self-intersection; with the diagonal
+# yielding, the pleats form the wave and the cells can stay flat. Measured:
+# facet flex drops to 2-7° mean (sharp creases) with the pleats still folding
+# 98-100% in their declared direction and zero self-intersection.
+
+# --- self-collision: VERTEX-vs-TRIANGLE, not vertex-vs-vertex ---------------
+# THIS IS WHAT LETS THE STOW BE BOTH TIGHT AND FLAT, and it is the reason the
+# thickness below can be small. Stow height is roughly (layers stacked) x
+# (layer thickness), so a flat stow needs THIN layers; but the old vertex-pair
+# repulsion could only stop layers phasing by holding them a big distance
+# apart (0.26-0.78), which is exactly what inflated the model into a tower
+# when the fold was driven deep. Vertex-pair distance also structurally cannot
+# catch the crossings that actually happen here: an edge passing through the
+# middle of a facet with no two vertices ever close. Measured, a trailing
+# vertex-pair pass only took 31x31 from 80 true intersections to 64.
+#
+# A real point-to-triangle test fixes both: it prevents penetration directly,
+# so the thickness only has to be a true paper thickness rather than a safety
+# shell, and thin layers keep the stow flat while the wrap pulls in tight.
+# Layer thickness in grid units (cell = 1.0) — roughly half what the old
+# vertex-pair repulsion needed for the same zero-phasing result, which is
+# exactly why the stow comes out flatter. Thinner still on the largest grids,
+# because they stack the most layers and height ~ layers x thickness; they can
+# afford it because their higher substep count moves less per pass, so nothing
+# tunnels through. Measured at 31x31/CAP=1.0/16 passes: 0.15 phases (228
+# crossings), 0.20 and above are clean.
+VT_ITERS = 6  # projection passes per call. NOT optional: a vertex buried in a
+# tight stow gets many simultaneous contacts, and the per-vertex averaging
+# below dilutes each one, so a couple of passes leaves crossings behind.
+# Measured at 31x31 / thickness 0.35: 2 passes -> 4 intersections, 6 -> zero.
+VT_FLAT_EXCLUDE = 1.6  # ignore triangles this close in the FLAT sheet — those
+# are the vertex's own neighbourhood, which is meant to touch itself
+
+SEED_KICK = 0.01  # tiny random z offset on the flat seed so the first fold
+# step has a direction to break out of the perfectly-flat plane
+
+# SEED_SWIRL — the sheet has TWO ways to get smaller, and without a nudge it
+# picks the wrong one. It can spiral (every ring turning about the hub, the way
+# a real flasher collapses) or it can just crush inward radially, which buckles
+# the rings and reads as CRUMPLING. Both are near-symmetric solutions to the
+# same constraints, so a random z seed leaves the choice to noise and the crush
+# usually wins: measured twist per ring was +25 +16 +5 +2 -0 -2, i.e. the rim
+# barely rotated at all while the inner rings buckled (spread 25 deg).
+#
+# Seeding a small COHERENT rotation, growing with radius, breaks that symmetry
+# toward the spiral. It is only a seed — a few degrees on the flat sheet, which
+# the length projection immediately cleans up — not a prescribed motion; the
+# crease pattern still decides the final shape.
+# Radians of twist accumulated at the sheet edge over the whole fold. Applied
+# INCREMENTALLY as foldness advances, never all at once — the wrap winds up as
+# the pleats close, the way real paper does, and frame 0 stays perfectly flat.
+# Negative winds the sheet so that |rotation| GROWS outward, which is the
+# real spiral: measured 23x23 twist per ring -13 -35 -42 -44 -46 -48. Positive
+# instead spins the inner rings hardest (+44 +29 +20 ...), which is not a wrap.
+# Bigger sheets get more, having more rings to wind. This also LOWERS strain
+# (23x23: 7.45% -> 6.89%), confirming the spiral is the lower-energy mode the
+# solver was previously failing to find rather than something forced on it.
 
 
-def _cross2(ax, ay, bx, by):
-    return ax * by - ay * bx
+def _cross3(a, b):
+    """3-D cross product without np.cross's axis-handling overhead.
+
+    np.cross spends most of its time in moveaxis bookkeeping; it measured at
+    8s of a 101s solve. This is the same arithmetic, written out.
+    """
+    out = np.empty_like(a)
+    out[:, 0] = a[:, 1] * b[:, 2] - a[:, 2] * b[:, 1]
+    out[:, 1] = a[:, 2] * b[:, 0] - a[:, 0] * b[:, 2]
+    out[:, 2] = a[:, 0] * b[:, 1] - a[:, 1] * b[:, 0]
+    return out
+
+
+def _norm3(a):
+    """Row-wise 2-norm, cheaper than np.linalg.norm's generic dispatch."""
+    return np.sqrt(a[:, 0] * a[:, 0] + a[:, 1] * a[:, 1] + a[:, 2] * a[:, 2])
 
 
 class FlasherFoldSolver:
     def __init__(self, pattern: CreasePattern, params: FlasherParams):
         self.params = params
-        by_id = {v.id: v for v in pattern.vertices}
-        self.n_out = max(by_id) + 1
-        self.flat = np.array([list(by_id[i].position) + [0.0] for i in range(self.n_out)])
-        V = self.n_out
-        rings = max(pattern.ring_count, 1)
-        self.relax_substeps = min(MAX_RELAX_SUBSTEPS, max(20, round(RELAX_SUBSTEPS_PER_RING * rings)))
-        self.length_iters = min(MAX_LENGTH_ITERS, max(10, round(LENGTH_ITERS_PER_RING * rings)))
-        self.global_spin_radians = math.radians(
-            min(MAX_GLOBAL_SPIN_DEGREES, GLOBAL_SPIN_DEGREES_PER_RING * rings)
-        )
-        # Rate-limit budget must let the farthest-from-hub vertex reach the
-        # stow within STEPS frames; scale the per-frame cap with the sheet's
-        # actual flat reach (robust to any pattern, incl. imported ones),
-        # floored at the tuned MAX_STEP_PER_FRAME so small sheets are unchanged.
-        flat_reach = float(np.max(np.linalg.norm(self.flat[:, :2], axis=1)))
-        self.max_step_per_frame = max(
-            MAX_STEP_PER_FRAME, STEP_BUDGET_MARGIN * flat_reach / STEPS
-        )
+        by_id = {v.id: v.position for v in pattern.vertices}
+        self.V = max(by_id) + 1
+        self.flat = np.array([list(by_id[i]) + [0.0] for i in range(self.V)])
+        self.face_vids = np.array([f.vertex_ids for f in pattern.faces])
 
+        def is_cell_center(vid: int) -> bool:
+            # cell centers sit at integer flat coords; grid corners at ±0.5
+            x, y = by_id[vid]
+            return abs(x - round(x)) < 0.1 and abs(y - round(y)) < 0.1
+
+        # Hinges: every interior edge shared by exactly two triangles, each
+        # classified so its fold can be weighted (pleats/walls lead, diagonal
+        # aids, facets stay flat).
         assign = {
             (min(e.v0, e.v1), max(e.v0, e.v1)): (e.assignment, e.fold_factor)
             for e in pattern.edges
         }
         edge_tris: dict[tuple[int, int], list[int]] = defaultdict(list)
-        for f in pattern.faces:
-            t = f.vertex_ids
+        for t in self.face_vids:
             for a, b, apex in ((t[0], t[1], t[2]), (t[1], t[2], t[0]), (t[2], t[0], t[1])):
-                edge_tris[(min(a, b), max(a, b))].append(apex)
+                edge_tris[(min(int(a), int(b)), max(int(a), int(b)))].append(int(apex))
 
-        hi, hj, hk, hl, sign, mag = [], [], [], [], [], []
+        hi, hj, hk, hl, sign, mag, weight = [], [], [], [], [], [], []
         for (a, b), apexes in edge_tris.items():
             if len(apexes) != 2:
                 continue
@@ -208,122 +262,83 @@ class FlasherFoldSolver:
                 continue
             d = self.flat[b, :2] - self.flat[a, :2]
             k, l = apexes
-            if _cross2(d[0], d[1], *(self.flat[k, :2] - self.flat[a, :2])) < 0:
+            if d[0] * (self.flat[k, 1] - self.flat[a, 1]) - d[1] * (self.flat[k, 0] - self.flat[a, 0]) < 0:
                 k, l = l, k
             hi.append(a); hj.append(b); hk.append(k); hl.append(l)
             sign.append({"mountain": 1.0, "valley": -1.0, "facet": 0.0}[asg])
-            mag.append(np.pi * factor)
+            mag.append(math.pi * factor)
+            if asg == "facet":
+                weight.append(FACET_WEIGHT)
+            elif is_cell_center(a) or is_cell_center(b):
+                weight.append(DIAGONAL_WEIGHT)  # region diagonal — passive aid
+            elif factor == 0.5:
+                weight.append(WALL_WEIGHT)  # hub-cell wall bend
+            else:
+                weight.append(PLEAT_WEIGHT)  # accordion pleat — leads
         self.hi, self.hj, self.hk, self.hl = map(np.array, (hi, hj, hk, hl))
         self.sign, self.mag = np.array(sign), np.array(mag)
+        self.hinge_weight = np.array(weight)
+        self.real_hinge = self.sign != 0
+        # Flattened hinge-vertex indices and the per-vertex incidence count.
+        # Both are fixed for the whole solve, so the dihedral projection can
+        # scatter with bincount instead of the much slower np.add.at.
+        self.h_all = np.concatenate((self.hi, self.hj, self.hk, self.hl))
+        self.hinge_cnt = np.maximum(
+            np.bincount(self.h_all, minlength=self.V).astype(float), 1.0
+        )
 
+        # Edges (for the length constraint) and their flat rest lengths.
         self.ea = np.array([a for a, _ in edge_tris])
         self.eb = np.array([b for _, b in edge_tris])
         self.rest = np.linalg.norm(self.flat[self.eb] - self.flat[self.ea], axis=1)
-        deg = np.zeros(V)
+        deg = np.zeros(self.V)
         np.add.at(deg, self.ea, 1.0)
         np.add.at(deg, self.eb, 1.0)
         self.inv_deg = 1.0 / np.maximum(deg, 1.0)
-        # Sparse vertex<-edge incidence matrix: scatter-adding `corr` into
-        # `dX` every length-projection iteration via np.add.at is, for a
-        # mesh this size, the dominant cost of the whole solve (measured:
-        # ~85% of per-substep time on the 31x31 preset) — np.add.at doesn't
-        # vectorize scatter-with-duplicate-indices well. A sparse matvec
-        # against a fixed incidence matrix does the same accumulation an
-        # order of magnitude faster since the topology never changes.
-        n_edges = len(self.ea)
-        self._incidence = sparse.csr_matrix(
-            (
-                np.concatenate([np.ones(n_edges), -np.ones(n_edges)]),
-                (
-                    np.concatenate([self.ea, self.eb]),
-                    np.concatenate([np.arange(n_edges), np.arange(n_edges)]),
-                ),
-            ),
-            shape=(V, n_edges),
-        )
 
-        # Pin the hub square flat — the central square all the rest folds around.
+        # Hub cell pinned flat at the origin — the fixed centre everything wraps
+        # around (and the free gauge choice for the solve).
         rho = np.maximum(np.abs(self.flat[:, 0]), np.abs(self.flat[:, 1]))
         self.pinned = rho <= HUB_HALF + 1e-9
 
-        edges = {e.id: e for e in pattern.edges}
-        faces = {f.id: f for f in pattern.faces}
-        adj = {a["faceId"]: a["neighbors"] for a in pattern.adjacency}
-        hub = next(f.id for f in pattern.faces if f.ring_index == 0)
-        self.hub = hub
-        self.n_faces = len(pattern.faces)
-        self.face_vids = np.array([faces[i].vertex_ids for i in range(self.n_faces)])
+        rings = max(pattern.ring_count, 1)
+        # Per-preset fold profile (see FOLD_PROFILE above).
+        for min_rings, cap, subs, swirl, thick, dih in FOLD_PROFILE:
+            if rings >= min_rings:
+                self.cap = cap
+                self.substeps = subs
+                self.swirl = swirl
+                self.vt_thickness = thick
+                self.dihedral_iters = dih
+                break
 
-        # Compose each face's full rigid transform at the exact t=1 (CAP-scaled)
-        # closure, once, via a BFS spanning tree from the hub.
-        seen = {hub}
-        R: list = [None] * self.n_faces
-        Tt: list = [None] * self.n_faces
-        R[hub] = np.eye(3)
-        Tt[hub] = np.zeros(3)
-        queue = deque([hub])
-        while queue:
-            f = queue.popleft()
-            for nb in adj[f]:
-                g, eid = nb["faceId"], nb["sharedEdgeId"]
-                if g in seen:
-                    continue
-                seen.add(g)
-                e = edges[eid]
-                p0, p1 = self.flat[e.v0], self.flat[e.v1]
-                centroid = np.mean([self.flat[v] for v in faces[g].vertex_ids], axis=0)
-                d = p1 - p0
-                w = centroid - p0
-                side = np.sign(d[0] * w[1] - d[1] * w[0])
-                if e.assignment in ("facet", "border"):
-                    Rl, tl = np.eye(3), np.zeros(3)
-                else:
-                    s = {"mountain": 1.0, "valley": -1.0}[e.assignment]
-                    phi = s * np.pi * e.fold_factor * CAP
-                    a_ = -side * phi
-                    dn = d / np.linalg.norm(d)
-                    c, sn = np.cos(a_), np.sin(a_)
-                    K = np.array([[0, -dn[2], dn[1]], [dn[2], 0, -dn[0]], [-dn[1], dn[0], 0]])
-                    Rl = np.eye(3) + sn * K + (1 - c) * (K @ K)
-                    tl = p0 - Rl @ p0
-                R[g] = R[f] @ Rl
-                Tt[g] = R[f] @ tl + Tt[f]
-                queue.append(g)
-        self.t_final = np.array(Tt)
-        self._rot_final = Rotation.from_matrix(np.array(R))
+        # Flat-space centroid of every face, used to skip a vertex's own
+        # neighbourhood in the vertex-triangle test (those panels share creases
+        # and are supposed to touch).
+        self.face_flat_cent = self.flat[self.face_vids][:, :, :2].mean(axis=1)
+        # A triangle's own extent, so the candidate search radius covers it.
+        self.tri_reach = float(
+            np.max(
+                np.linalg.norm(
+                    self.flat[self.face_vids][:, :, :2] - self.face_flat_cent[:, None, :],
+                    axis=2,
+                )
+            )
+        )
 
-    def _face_pose(self, s: float):
-        """Every face's rotation SLERPed from identity toward its final
-        rotation by fraction s in [0,1]; translation lerped the same way."""
-        if s <= 0.0:
-            R = np.tile(np.eye(3), (self.n_faces, 1, 1))
-            t = np.zeros((self.n_faces, 3))
-            return R, t
-        R = Rotation.from_rotvec(self._rot_final.as_rotvec() * s).as_matrix()
-        return R, self.t_final * s
-
-    def _seed(self, s: float) -> np.ndarray:
-        R, t = self._face_pose(s)
-        pts = np.einsum("fij,fvj->fvi", R, self.flat[self.face_vids]) + t[:, None, :]
-        ids = self.face_vids.reshape(-1)
-        acc = np.zeros((self.n_out, 3))
-        cnt = np.zeros(self.n_out)
-        np.add.at(acc, ids, pts.reshape(-1, 3))
-        np.add.at(cnt, ids, 1.0)
-        return acc / np.maximum(cnt, 1.0)[:, None]
-
+    # --- constraints -------------------------------------------------------
     def _dihedral(self, X):
         x1, x2, x3, x4 = X[self.hi], X[self.hj], X[self.hk], X[self.hl]
         e = x2 - x1
-        Le = np.linalg.norm(e, axis=1, keepdims=True)
-        n1 = np.cross(x2 - x1, x3 - x1)
-        n2 = np.cross(x4 - x1, x2 - x1)
-        L1 = np.linalg.norm(n1, axis=1, keepdims=True)
-        L2 = np.linalg.norm(n2, axis=1, keepdims=True)
-        n1u, n2u = n1 / L1, n2 / L2
-        h1, h2 = L1 / Le, L2 / Le
+        Le = _norm3(e)[:, None]
+        n1 = _cross3(x2 - x1, x3 - x1)
+        n2 = _cross3(x4 - x1, x2 - x1)
+        L1 = _norm3(n1)[:, None]
+        L2 = _norm3(n2)[:, None]
+        n1u, n2u = n1 / np.maximum(L1, 1e-9), n2 / np.maximum(L2, 1e-9)
+        h1, h2 = np.maximum(L1, 1e-9) / Le, np.maximum(L2, 1e-9) / Le
         th = np.arctan2(
-            np.sum(np.cross(n1u, n2u) * (e / Le), axis=1),
+            np.sum(_cross3(n1u, n2u) * (e / Le), axis=1),
             np.clip(np.sum(n1u * n2u, axis=1), -1, 1),
         )
         w1 = (np.sum((x3 - x1) * e, axis=1) / Le[:, 0] ** 2)[:, None]
@@ -334,96 +349,223 @@ class FlasherFoldSolver:
         g2 = -w1 * g3 - w2 * g4
         return th, g1, g2, g3, g4
 
-    def _project_lengths(self, X: np.ndarray) -> None:
-        for _ in range(self.length_iters):
+    def _project_dihedrals(self, X, frac):
+        """Drive each hinge toward its target: real creases to their scheduled
+        signed angle, facets toward flat — each scaled by its weight so the
+        pleats and hub walls lead, the diagonal only aids, and cells stay
+        rigid. Run last/hardest so the crease pattern dominates."""
+        target = np.where(self.real_hinge, self.sign * self.mag * self.cap * frac, 0.0)
+        w = np.ones(self.V)
+        w[self.pinned] = 0.0
+        w1, w2, w3, w4 = w[self.hi], w[self.hj], w[self.hk], w[self.hl]
+        hw = self.hinge_weight
+        for _ in range(self.dihedral_iters):
+            th, g1, g2, g3, g4 = self._dihedral(X)
+            err = np.mod(th - target + math.pi, 2 * math.pi) - math.pi
+            err *= hw
+            denom = (
+                w1 * np.sum(g1 * g1, axis=1)
+                + w2 * np.sum(g2 * g2, axis=1)
+                + w3 * np.sum(g3 * g3, axis=1)
+                + w4 * np.sum(g4 * g4, axis=1)
+            )
+            lam = err / np.maximum(denom, 1e-9)
+            # Scatter-add via bincount, not np.add.at. Identical arithmetic, but
+            # ufunc.at is unbuffered and was 23% of total solve time; bincount
+            # is the vectorised path. `self.hinge_cnt` is precomputed because the
+            # per-vertex hinge incidence never changes during the solve.
+            corr = np.concatenate(
+                (
+                    -(lam * w1)[:, None] * g1,
+                    -(lam * w2)[:, None] * g2,
+                    -(lam * w3)[:, None] * g3,
+                    -(lam * w4)[:, None] * g4,
+                )
+            )
+            dX = np.empty_like(X)
+            for c in range(3):
+                dX[:, c] = np.bincount(self.h_all, weights=corr[:, c], minlength=self.V)
+            dX /= self.hinge_cnt[:, None]
+            dX[self.pinned] = 0.0
+            X += dX
+
+    def _project_lengths(self, X):
+        for _ in range(LENGTH_ITERS):
             d = X[self.eb] - X[self.ea]
             L = np.linalg.norm(d, axis=1, keepdims=True)
             corr = (L - self.rest[:, None]) * (d / np.maximum(L, 1e-9)) * LENGTH_RELAX
-            dX = self._incidence @ corr  # sparse matvec: same scatter-add as
-            # np.add.at(dX, ea, corr); np.add.at(dX, eb, -corr), an order of
-            # magnitude faster since the incidence matrix is precomputed once
+            dX = np.zeros_like(X)
+            np.add.at(dX, self.ea, corr)
+            np.add.at(dX, self.eb, -corr)
             dX *= self.inv_deg[:, None]
             dX[self.pinned] = 0.0
             X += dX
 
-    def _repel(self, X: np.ndarray) -> None:
-        """Push apart vertex pairs close in 3-D but far apart in the flat
-        sheet — genuine self-intersection, not two sides of a pleat meeting
-        as intended."""
-        pairs = cKDTree(X).query_pairs(MIN_SEPARATION, output_type="ndarray")
+    @staticmethod
+    def _closest_on_tri(p, a, b, c):
+        """Closest point on triangle (a,b,c) to p, plus barycentric weights.
+
+        Vectorised Ericson (Real-Time Collision Detection) region test: the
+        closest point is on a vertex, an edge, or the face interior.
+        """
+        ab, ac, ap = b - a, c - a, p - a
+        d1 = np.einsum("ij,ij->i", ab, ap)
+        d2 = np.einsum("ij,ij->i", ac, ap)
+        bp = p - b
+        d3 = np.einsum("ij,ij->i", ab, bp)
+        d4 = np.einsum("ij,ij->i", ac, bp)
+        cp = p - c
+        d5 = np.einsum("ij,ij->i", ab, cp)
+        d6 = np.einsum("ij,ij->i", ac, cp)
+
+        va = d3 * d6 - d5 * d4
+        vb = d5 * d2 - d1 * d6
+        vc = d1 * d4 - d3 * d2
+        denom = np.where(np.abs(va + vb + vc) < 1e-12, 1e-12, va + vb + vc)
+        v_f = vb / denom
+        w_f = vc / denom
+
+        # start from the face-interior solution, then override by region
+        v = v_f
+        w = w_f
+        # vertex a
+        m = (d1 <= 0) & (d2 <= 0)
+        v = np.where(m, 0.0, v)
+        w = np.where(m, 0.0, w)
+        # vertex b
+        m2 = (d3 >= 0) & (d4 <= d3)
+        v = np.where(m2, 1.0, v)
+        w = np.where(m2, 0.0, w)
+        # vertex c
+        m3 = (d6 >= 0) & (d5 <= d6)
+        v = np.where(m3, 0.0, v)
+        w = np.where(m3, 1.0, w)
+        # edge ab
+        m4 = (vc <= 0) & (d1 >= 0) & (d3 <= 0) & ~(m | m2 | m3)
+        t_ab = d1 / np.where((d1 - d3) == 0, 1e-12, d1 - d3)
+        v = np.where(m4, t_ab, v)
+        w = np.where(m4, 0.0, w)
+        # edge ac
+        m5 = (vb <= 0) & (d2 >= 0) & (d6 <= 0) & ~(m | m2 | m3 | m4)
+        t_ac = d2 / np.where((d2 - d6) == 0, 1e-12, d2 - d6)
+        v = np.where(m5, 0.0, v)
+        w = np.where(m5, t_ac, w)
+        # edge bc
+        m6 = (va <= 0) & ((d4 - d3) >= 0) & ((d5 - d6) >= 0) & ~(m | m2 | m3 | m4 | m5)
+        t_bc = (d4 - d3) / np.where(
+            ((d4 - d3) + (d5 - d6)) == 0, 1e-12, (d4 - d3) + (d5 - d6)
+        )
+        v = np.where(m6, 1.0 - t_bc, v)
+        w = np.where(m6, t_bc, w)
+
+        q = a + ab * v[:, None] + ac * w[:, None]
+        return q, 1.0 - v - w, v, w
+
+    def _collide_vt(self, X):
+        """Push vertices out of triangles they are penetrating.
+
+        Unlike vertex-pair repulsion this catches an edge/vertex passing
+        through the middle of a facet, so the layer thickness can stay thin
+        (which is what keeps the stow flat) without the sheet phasing.
+        """
+        h = self.vt_thickness
+        # Candidate pairs are found ONCE per call, then the projection iterates
+        # on them. Rebuilding both KD-trees inside the iteration loop cost ~a
+        # third of total solve time, and it bought nothing: the search radius
+        # already carries a triangle's full reach as margin, so the candidate
+        # set stays valid across the small corrections these passes apply.
+        tris = X[self.face_vids]
+        cent = tris.mean(axis=1)
+        # ALL triangles within reach, not the K nearest. A K-nearest search
+        # fails exactly where it matters: on a fine grid the K closest
+        # triangles to a vertex are all in its own flat neighbourhood (which
+        # is excluded below), so the penetrating layer never gets tested.
+        pairs = cKDTree(X).sparse_distance_matrix(
+            cKDTree(cent), self.tri_reach + h, output_type="ndarray"
+        )
         if len(pairs) == 0:
             return
-        i, j = pairs[:, 0], pairs[:, 1]
-        flat_d = np.linalg.norm(self.flat[i, :2] - self.flat[j, :2], axis=1)
-        far = flat_d > REPEL_FLAT_EXCLUDE
-        i, j = i[far], j[far]
-        if len(i) == 0:
+        vi = pairs["i"].astype(np.intp)
+        fi = pairs["j"].astype(np.intp)
+        # skip the vertex's own neighbourhood in the FLAT sheet
+        far_flat = (
+            np.linalg.norm(self.flat[vi, :2] - self.face_flat_cent[fi], axis=1)
+            > VT_FLAT_EXCLUDE
+        )
+        vi, fi = vi[far_flat], fi[far_flat]
+        if len(vi) == 0:
             return
-        d = X[j] - X[i]
-        dist = np.maximum(np.linalg.norm(d, axis=1, keepdims=True), 1e-6)
-        push = np.maximum(MIN_SEPARATION - dist[:, 0], 0.0)[:, None] * (d / dist) * REPEL_GAIN
-        F = np.zeros_like(X)
-        np.add.at(F, i, -push)
-        np.add.at(F, j, push)
-        F[self.pinned] = 0.0
-        X += F
+        for _ in range(VT_ITERS):
+            a, b, c = X[self.face_vids[fi, 0]], X[self.face_vids[fi, 1]], X[self.face_vids[fi, 2]]
+            p = X[vi]
+            q, wa, wb, wc = self._closest_on_tri(p, a, b, c)
+            d = p - q
+            dist = _norm3(d)
+            hit = dist < h
+            if not hit.any():
+                return
+            # narrow to the actual contacts; later passes only revisit those
+            vi, fi = vi[hit], fi[hit]
+            d, dist = d[hit], dist[hit]
+            wa, wb, wc = wa[hit], wb[hit], wc[hit]
+            # degenerate (vertex exactly on the facet): use the facet normal
+            nrm = _cross3(b[hit] - a[hit], c[hit] - a[hit])
+            nl = _norm3(nrm)[:, None]
+            n = np.where(
+                dist[:, None] > 1e-9, d / np.maximum(dist, 1e-9)[:, None], nrm / np.maximum(nl, 1e-9)
+            )
+            pen = (h - dist)[:, None]
+            # split the correction between the vertex and the facet
+            corr = 0.5 * pen * n
+            tv0, tv1, tv2 = self.face_vids[fi, 0], self.face_vids[fi, 1], self.face_vids[fi, 2]
+            idx = np.concatenate((vi, tv0, tv1, tv2))
+            vals = np.concatenate((corr, -corr * wa[:, None], -corr * wb[:, None], -corr * wc[:, None]))
+            dX = np.empty_like(X)
+            for ci in range(3):
+                dX[:, ci] = np.bincount(idx, weights=vals[:, ci], minlength=self.V)
+            cnt = np.maximum(np.bincount(idx, minlength=self.V).astype(float), 1.0)
+            dX /= cnt[:, None]
+            dX[self.pinned] = 0.0
+            X += dX
 
+    # --- sweep -------------------------------------------------------------
     @staticmethod
     def _smoothstep(u: float) -> float:
         u = min(max(u, 0.0), 1.0)
         return u * u * (3.0 - 2.0 * u)
 
-    def _spun_for_display(self, X: np.ndarray, s: float) -> np.ndarray:
-        """Rigid Z-rotation of the whole frame by the display-only global
-        spin (see module docstring) — an isometry, so it cannot change any
-        edge length or dihedral angle. Purely a choice of which panel's
-        orientation the *output* is expressed relative to; the internal
-        hub-pinned solve above is completely unaffected."""
-        angle = self.global_spin_radians * s
-        c, sn = math.cos(angle), math.sin(angle)
-        Xs = X.copy()
-        Xs[:, 0] = c * X[:, 0] - sn * X[:, 1]
-        Xs[:, 1] = sn * X[:, 0] + c * X[:, 1]
-        return Xs
-
     def solve_sweep(self):
         frames = [np.round(self.flat, 4).reshape(-1).tolist()]
         samples = [0.0]
-        X_prev: np.ndarray | None = None
+        rng = np.random.default_rng(0)
+        X = self.flat.copy()
+        X[:, 2] += SEED_KICK * rng.standard_normal(self.V)
+        X[self.pinned, 2] = 0.0
+        # Per-vertex swirl rate, applied INCREMENTALLY as the fold progresses
+        # (see SEED_SWIRL). Applying it all at t=0 would snap the sheet into a
+        # twist before it has begun folding; growing it with foldness is both
+        # smooth and what the paper actually does — the wrap winds up as the
+        # pleats close.
+        ring = np.maximum(np.abs(self.flat[:, 0]), np.abs(self.flat[:, 1]))
+        swirl_rate = self.swirl * (ring / max(ring.max(), 1e-9))
+        swirl_rate[self.pinned] = 0.0
+        prev_frac = 0.0
         for step in range(1, STEPS + 1):
             t = step / STEPS
-            s = self._smoothstep(t)
-            target = self.sign * self.mag * CAP * s
-
-            X = self._seed(s)
-            if X_prev is not None:
-                X = (1 - PREV_BLEND) * X + PREV_BLEND * X_prev
-                d = X - X_prev
-                dist = np.linalg.norm(d, axis=1, keepdims=True)
-                scale = np.minimum(1.0, self.max_step_per_frame / np.maximum(dist, 1e-9))
-                X = X_prev + d * scale
-
-            vel = np.zeros_like(X)
-            for _ in range(self.relax_substeps):
-                F = np.zeros_like(X)
-                th, g1, g2, g3, g4 = self._dihedral(X)
-                err = th - target
-                err = np.mod(err + np.pi, 2 * np.pi) - np.pi
-                c = (-BEND_GAIN * err)[:, None]
-                np.add.at(F, self.hi, c * g1)
-                np.add.at(F, self.hj, c * g2)
-                np.add.at(F, self.hk, c * g3)
-                np.add.at(F, self.hl, c * g4)
-                F[self.pinned] = 0.0
-                vel = (vel + DT * F) * DAMP
-                X = X + DT * vel
-                X[self.pinned, 2] = 0.0
+            frac = self._smoothstep(t)
+            if self.swirl:
+                a = swirl_rate * (frac - prev_frac)
+                ca, sa = np.cos(a), np.sin(a)
+                x, y = X[:, 0].copy(), X[:, 1].copy()
+                X[:, 0] = ca * x - sa * y
+                X[:, 1] = sa * x + ca * y
+            prev_frac = frac
+            for _ in range(self.substeps):
                 self._project_lengths(X)
-                self._repel(X)
-            X_prev = X  # unrotated — the rate limiter and next seed blend
-            # always operate in the stable hub-pinned frame that was tuned
-            # and validated for strain/self-intersection/closure
-            frames.append(np.round(self._spun_for_display(X, s), 4).reshape(-1).tolist())
+                self._project_dihedrals(X, frac)  # creases dominate the shape
+                self._collide_vt(X)  # ...but nothing is allowed to pass through
+                X[self.pinned, 2] = 0.0
+            frames.append(np.round(X, 4).reshape(-1).tolist())
             samples.append(t)
         return samples, frames
 

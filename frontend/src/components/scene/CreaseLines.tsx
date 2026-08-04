@@ -1,21 +1,22 @@
-import { useEffect, useMemo } from "react";
+import { useEffect, useLayoutEffect, useMemo } from "react";
 import * as THREE from "three";
 import type { CreasePattern, CreaseAssignment } from "../../model/types";
 import type { Theme } from "../../store/useAppStore";
 
-// Mountain folds up (blue, matches the app's accent color), valley folds
-// down (red, matches the app's error color) — same semantic pair used
-// throughout the UI. Border needs a theme-specific tone: near-black reads
-// fine against light paper but disappears against a dark canvas, so it
-// flips to a pale tone in dark mode.
+// Mountain folds up (yellow), valley folds down (red) — this pair is the
+// project's explicit fold-direction convention: yellow creases fold one
+// way, red the other, uniformly, everywhere (including the diagonal — no
+// crease is a special case). Border needs a theme-specific tone: near-black
+// reads fine against light paper but disappears against a dark canvas, so
+// it flips to a pale tone in dark mode.
 const CREASE_COLORS: Record<Theme, Partial<Record<CreaseAssignment, string>>> = {
   light: {
-    mountain: "#2563eb",
+    mountain: "#ca8a04",
     valley: "#dc2626",
     border: "#0b0e14",
   },
   dark: {
-    mountain: "#5b9bff",
+    mountain: "#facc15",
     valley: "#f87171",
     border: "#edecea",
   },
@@ -23,12 +24,12 @@ const CREASE_COLORS: Record<Theme, Partial<Record<CreaseAssignment, string>>> = 
 };
 
 // Fallback palette used when the user's chosen paper color sits too close
-// to one of the fixed crease colors above (e.g. blue paper would otherwise
-// swallow the blue mountain lines). Amber/magenta sit far from both the
-// default palette and each other in hue, so they stay visible against
-// almost any paper color, in either theme.
+// to one of the fixed crease colors above (e.g. yellow paper would otherwise
+// swallow the yellow mountain lines). Blue/magenta sit far from both the
+// default yellow/red palette and each other in hue, so they stay visible
+// against almost any paper color, in either theme.
 const FALLBACK_CREASE_COLORS: Partial<Record<CreaseAssignment, string>> = {
-  mountain: "#e0a526",
+  mountain: "#2563eb",
   valley: "#b0289e",
 };
 
@@ -55,7 +56,7 @@ interface Props {
   theme: Theme;
 }
 
-// CAD-style overlay: mountain (red) / valley (blue) / border (dark) crease
+// CAD-style overlay: mountain (yellow) / valley (red) / border (dark) crease
 // lines, fading out as the model folds so the stowed form reads as plain
 // paper rather than a wireframe.
 export function CreaseLines({ pattern, positions, foldness, paperColor, theme }: Props) {
@@ -68,32 +69,54 @@ export function CreaseLines({ pattern, positions, foldness, paperColor, theme }:
     return tooClose ? { ...base, ...FALLBACK_CREASE_COLORS } : base;
   }, [paperColor, theme]);
 
-  const geometries = useMemo(() => {
-    const coordsByAssignment = new Map<CreaseAssignment, number[]>();
+  // Endpoint vertex ids per assignment, and a geometry allocated once for each.
+  // Both depend only on the PATTERN — keying them on `positions` used to
+  // rebuild every line geometry on every foldness change, and (worse) it did so
+  // even while the overlay was fully faded out, since the opacity early-return
+  // sits below these hooks.
+  const groups = useMemo(() => {
+    const idsByAssignment = new Map<CreaseAssignment, number[]>();
     for (const edge of pattern.edges) {
       if (edge.assignment !== "mountain" && edge.assignment !== "valley" && edge.assignment !== "border") {
         continue;
       }
-      const coords = coordsByAssignment.get(edge.assignment) ?? [];
-      for (const id of [edge.v0, edge.v1]) {
-        coords.push(positions[id * 3], positions[id * 3 + 1], positions[id * 3 + 2]);
-      }
-      coordsByAssignment.set(edge.assignment, coords);
+      const ids = idsByAssignment.get(edge.assignment) ?? [];
+      ids.push(edge.v0, edge.v1);
+      idsByAssignment.set(edge.assignment, ids);
     }
-    return [...coordsByAssignment].map(([assignment, coords]) => {
+    return [...idsByAssignment].map(([assignment, ids]) => {
+      const order = new Uint32Array(ids);
       const geom = new THREE.BufferGeometry();
-      geom.setAttribute("position", new THREE.Float32BufferAttribute(coords, 3));
-      return { assignment, geom };
+      geom.setAttribute("position", new THREE.BufferAttribute(new Float32Array(order.length * 3), 3));
+      return { assignment, order, geom };
     });
-  }, [pattern, positions]);
+  }, [pattern]);
 
-  useEffect(() => () => geometries.forEach(({ geom }) => geom.dispose()), [geometries]);
+  useEffect(() => () => groups.forEach(({ geom }) => geom.dispose()), [groups]);
 
-  if (opacity <= 0) return null;
+  const visible = opacity > 0;
+  useLayoutEffect(() => {
+    if (!visible) return; // nothing to draw — don't pay for the update
+    for (const { order, geom } of groups) {
+      const attr = geom.getAttribute("position") as THREE.BufferAttribute;
+      const dst = attr.array as Float32Array;
+      for (let i = 0; i < order.length; i++) {
+        const src = order[i] * 3;
+        const out = i * 3;
+        dst[out] = positions[src];
+        dst[out + 1] = positions[src + 1];
+        dst[out + 2] = positions[src + 2];
+      }
+      attr.needsUpdate = true;
+      geom.computeBoundingSphere();
+    }
+  }, [groups, positions, visible]);
+
+  if (!visible) return null;
 
   return (
     <>
-      {geometries.map(({ assignment, geom }) => (
+      {groups.map(({ assignment, geom }) => (
         <lineSegments key={assignment} geometry={geom}>
           <lineBasicMaterial color={colors[assignment]} transparent opacity={opacity} />
         </lineSegments>

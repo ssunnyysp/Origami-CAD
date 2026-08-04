@@ -4,7 +4,7 @@ Run with:
     cd backend
     PYTHONPATH="$PWD" .venv/bin/python scripts/validate_fold.py
 
-There's no test suite in this repo (see CLAUDE.md); this follows the same
+There's no test suite in this repo; this follows the same
 "ad-hoc script measuring real behavior" convention as the flasher generator's
 own validation, checking three things a unit test would but a screenshot
 can't:
