@@ -30,4 +30,6 @@ dist-ssr
 *.sln
 *.sw?
 
-# Claude Code local config (dev server launch config etc.)
+# Local AI/editor assistant config
+.claude/
+CLAUDE.md

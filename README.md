@@ -175,5 +175,4 @@ npm run build         # tsc -b && vite build
 npm run lint          # oxlint
 ```
 
-Open http://localhost:5173 once both are running. `.claude/launch.json` defines the same
-two processes for the IDE launcher. There is no test suite in this repo.
+Open http://localhost:5173 once both are running. There is no test suite in this repo.
