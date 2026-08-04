@@ -1,18 +1,82 @@
 :root {
+  color-scheme: dark;
+  font:
+    14px/1.5 "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+
+  /* Dark theme (default) — true neutral graphite grey, not a blue-tinted
+     navy, with four distinct tiers of lightness so surfaces read as
+     physically stacked (page < panel < elevated control) rather than one
+     flat wash. --stage is deliberately much lighter than the other three:
+     it's the backdrop the 3D model and 2D crease pattern sit on, styled
+     like a photography-studio backdrop (a mid grey, the way product shots
+     are actually lit) so the model reads as the well-lit subject instead
+     of receding into a dark void — the surrounding chrome (panel, header)
+     stays dark so it doesn't compete with it. */
+  --ink: #edecea;
+  --ink-soft: #a6a4a1;
+  --ink-faint: #706e6b;
+  --bg: #19181a;
+  --pane: #201f21;
+  --pane-elevated: #2a2929;
+  --line: #383736;
+  --line-strong: #4b4a48;
+  --stage: #55534f;
+  --stage-line: #454340;
+
+  --accent: #3b82f6;
+  --accent-hover: #60a5fa;
+  --accent-soft: rgba(59, 130, 246, 0.16);
+  --accent-glow: rgba(59, 130, 246, 0.45);
+  --accent-ink: #ffffff;
+
+  --error: #f87171;
+  --error-soft: rgba(248, 113, 113, 0.12);
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 12px 32px rgba(0, 0, 0, 0.5);
+  --radius: 8px;
+  --radius-sm: 6px;
+
+  /* Paper grain: a low-alpha turbulence texture layered under everything
+     (surfaces set it as a second background-image), so panels and the
+     model's backdrop read as paper stock rather than flat digital color —
+     consistent with this being an origami-folding tool. Subtle by design:
+     it should disappear at a glance and only register as "texture" up
+     close, never compete with text legibility. */
+  --noise: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='140' height='140'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix type='matrix' values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 0.05 0'/></filter><rect width='140' height='140' filter='url(%23n)'/></svg>");
+
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --t-fast: 0.15s;
+  --t-base: 0.25s;
+  --t-slide: 0.32s;
+}
+
+:root[data-theme="light"] {
   color-scheme: light;
-  font: 15px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  --serif: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
-  --ink: #2b2926;
-  --ink-soft: #8a8579;
-  --ink-faint: #b5afa1;
-  --paper: #f4f1ea;
-  --pane: #fbfaf7;
-  --line: rgba(43, 41, 38, 0.1);
-  --accent: #c96f4a; /* warm terracotta — reads "paper", not "tech" */
-  --accent-ink: #fff8f2; /* text/icon color on top of a solid accent fill */
-  --error: #b3372c;
-  --shadow-sm: 0 1px 2px rgba(43, 41, 38, 0.05);
-  --shadow-md: 0 2px 10px rgba(43, 41, 38, 0.1);
+  --ink: #0b0e14;
+  --ink-soft: #5b6472;
+  --ink-faint: #98a1ae;
+  --bg: #f3f4f7;
+  --pane: #ffffff;
+  --pane-elevated: #f8f9fb;
+  --line: #e3e6eb;
+  --line-strong: #cbd0d9;
+  --stage: #eef0f4;
+  --stage-line: #aab1bd;
+
+  --accent: #2563eb;
+  --accent-hover: #1d4ed8;
+  --accent-soft: rgba(37, 99, 235, 0.09);
+  --accent-glow: rgba(37, 99, 235, 0.28);
+  --accent-ink: #ffffff;
+
+  --error: #dc2626;
+  --error-soft: rgba(220, 38, 38, 0.08);
+
+  --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.05);
+  --shadow-md: 0 8px 24px rgba(15, 23, 42, 0.1);
 }
 
 * {
@@ -28,11 +92,11 @@ body,
 }
 
 body {
-  background-color: var(--paper);
-  /* Faint fiber grain so the background reads as paper stock, not a flat
-     color swatch — subtle enough to disappear under the UI. */
-  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix type='matrix' values='0 0 0 0 0.16  0 0 0 0 0.15  0 0 0 0 0.13  0 0 0 0.05 0'/></filter><rect width='120' height='120' filter='url(%23n)'/></svg>");
-  background-repeat: repeat;
+  background-color: var(--bg);
+  background-image: var(--noise);
+  transition:
+    background-color var(--t-base) ease,
+    color var(--t-base) ease;
 }
 
 .app-layout {
@@ -40,6 +104,7 @@ body {
   height: 100vh;
   width: 100vw;
   overflow: hidden;
+  animation: appEnter 0.5s var(--ease-out) both;
 }
 
 .canvas-area {
@@ -49,38 +114,72 @@ body {
   min-height: 0;
 }
 
+/* Grain over the WebGL canvas itself: the Three.js scene paints its own
+   pixels, so this is a transparent overlay rather than a background-image
+   on the container. pointer-events: none so it never intercepts orbit
+   drags or clicks meant for the 3-D view underneath. */
+.canvas-area::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: var(--noise);
+  pointer-events: none;
+  z-index: 1;
+}
+
 /* --- Task pane ---------------------------------------------------------- */
 
 .task-pane {
   width: 320px;
   flex-shrink: 0;
   height: 100%;
-  padding: 22px 24px;
+  padding: 20px 22px;
   background-color: var(--pane);
-  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix type='matrix' values='0 0 0 0 0.16  0 0 0 0 0.15  0 0 0 0 0.13  0 0 0 0.045 0'/></filter><rect width='120' height='120' filter='url(%23n)'/></svg>");
-  box-shadow: -1px 0 3px rgba(43, 41, 38, 0.06);
-  border-left: 1px solid var(--line);
+  background-image: var(--noise);
+  box-shadow: -1px 0 0 var(--line);
   display: flex;
   flex-direction: column;
   overflow-y: auto;
+  overflow-x: hidden;
+  transition:
+    width var(--t-slide) var(--ease-out),
+    padding-left var(--t-slide) var(--ease-out),
+    padding-right var(--t-slide) var(--ease-out),
+    background-color var(--t-base) ease,
+    box-shadow var(--t-base) ease;
+}
+
+.task-pane.is-collapsed {
+  width: 0;
+  padding-left: 0;
+  padding-right: 0;
+  box-shadow: none;
+}
+
+.task-pane > * {
+  transition: opacity 0.18s ease;
+}
+
+.task-pane.is-collapsed > * {
+  opacity: 0;
 }
 
 .pane-header {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
+  gap: 8px;
   padding-bottom: 16px;
-  margin-bottom: 22px;
-  /* A single soft rule reads like a fold crease under the title. */
+  margin-bottom: 20px;
   border-bottom: 1px solid var(--line);
+  white-space: nowrap;
 }
 
 .pane-header h1 {
-  font-family: var(--serif);
-  font-size: 19px;
+  font-size: 16px;
   margin: 0 0 3px;
-  font-weight: 600;
-  letter-spacing: 0.01em;
+  font-weight: 700;
+  letter-spacing: -0.01em;
   color: var(--ink);
 }
 
@@ -90,25 +189,55 @@ body {
   margin: 0;
 }
 
+.pane-header-actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
 .pane-toggle,
-.pane-reopen {
-  font: inherit;
-  font-size: 14px;
-  line-height: 1;
+.pane-reopen,
+.theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   color: var(--ink-soft);
   width: 28px;
   height: 28px;
   padding: 0;
   border: 1px solid var(--line);
-  border-radius: 8px;
-  background: #fff;
+  border-radius: var(--radius-sm);
+  background: var(--pane);
   cursor: pointer;
+  transition:
+    border-color var(--t-fast) ease,
+    color var(--t-fast) ease,
+    background-color var(--t-fast) ease,
+    transform var(--t-fast) ease,
+    box-shadow var(--t-fast) ease;
 }
 
 .pane-toggle:hover,
-.pane-reopen:hover {
-  color: var(--ink);
-  border-color: rgba(43, 41, 38, 0.25);
+.pane-reopen:hover,
+.theme-toggle:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 10px var(--accent-glow);
+}
+
+.pane-toggle:active,
+.pane-reopen:active,
+.theme-toggle:active {
+  transform: translateY(0);
+}
+
+.pane-toggle:focus-visible,
+.pane-reopen:focus-visible,
+.theme-toggle:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
 }
 
 /* Floating reopen handle when the pane is collapsed. */
@@ -116,8 +245,22 @@ body {
   position: absolute;
   top: 20px;
   right: 20px;
-  box-shadow: 0 2px 8px rgba(43, 41, 38, 0.12);
+  box-shadow: var(--shadow-md);
   z-index: 2;
+  animation: fadeScaleIn var(--t-base) var(--ease-out) both;
+}
+
+.theme-toggle svg {
+  position: relative;
+}
+
+.theme-toggle-icon {
+  display: inline-flex;
+  transition: transform var(--t-base) var(--ease-spring);
+}
+
+.theme-toggle:hover .theme-toggle-icon {
+  transform: rotate(20deg);
 }
 
 /* --- Controls ------------------------------------------------------------ */
@@ -126,6 +269,7 @@ body {
   padding-top: 18px;
   margin-top: 18px;
   border-top: 1px solid var(--line);
+  animation: sectionIn 0.5s var(--ease-out) both;
 }
 
 .panel-section--first {
@@ -134,11 +278,24 @@ body {
   border-top: none;
 }
 
+.panel-section:nth-of-type(1) {
+  animation-delay: 0.02s;
+}
+.panel-section:nth-of-type(2) {
+  animation-delay: 0.08s;
+}
+.panel-section:nth-of-type(3) {
+  animation-delay: 0.14s;
+}
+.panel-section:nth-of-type(4) {
+  animation-delay: 0.2s;
+}
+
 .section-label {
   margin: 0 0 14px;
   font-size: 11px;
   font-weight: 600;
-  letter-spacing: 0.09em;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--ink-faint);
 }
@@ -148,7 +305,7 @@ body {
   grid-template-columns: 78px 1fr 44px;
   align-items: center;
   gap: 10px;
-  margin-bottom: 16px;
+  margin-bottom: 14px;
   font-size: 13px;
 }
 
@@ -168,24 +325,35 @@ body {
   font: inherit;
   font-size: 13px;
   color: var(--ink);
-  padding: 7px 28px 7px 10px;
+  padding: 7px 30px 7px 10px;
   border: 1px solid var(--line);
-  border-radius: 9px;
+  border-radius: var(--radius-sm);
   background:
-    url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="10" height="6" viewBox="0 0 10 6"><path d="M1 1l4 4 4-4" fill="none" stroke="%238a8579" stroke-width="1.5" stroke-linecap="round"/></svg>')
+    url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="10" height="6" viewBox="0 0 10 6"><path d="M1 1l4 4 4-4" fill="none" stroke="%2398a1ae" stroke-width="1.5" stroke-linecap="round"/></svg>')
       no-repeat right 10px center,
-    #fff;
+    var(--pane-elevated);
   cursor: pointer;
+  transition:
+    border-color var(--t-fast) ease,
+    background-color var(--t-fast) ease;
 }
 
 .control-row select:hover {
-  border-color: rgba(43, 41, 38, 0.22);
+  border-color: var(--line-strong);
+}
+
+.control-row select:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
 }
 
 .control-value {
   text-align: right;
+  font-family: var(--mono);
   font-variant-numeric: tabular-nums;
   font-size: 12px;
+  font-weight: 500;
   color: var(--ink-soft);
 }
 
@@ -195,38 +363,51 @@ body {
   padding: 9px 12px;
   font: inherit;
   font-size: 13px;
-  font-weight: 550;
+  font-weight: 600;
   color: var(--ink);
-  background: #fff;
+  background: var(--pane-elevated);
   border: 1px solid var(--line);
-  border-radius: 9px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
   transition:
-    border-color 0.15s ease,
-    color 0.15s ease,
-    background-color 0.15s ease,
-    transform 0.08s ease,
-    box-shadow 0.15s ease;
+    border-color var(--t-fast) ease,
+    color var(--t-fast) ease,
+    background-color var(--t-fast) ease,
+    transform var(--t-fast) ease,
+    box-shadow var(--t-fast) ease;
 }
 
 .action-button:hover {
   border-color: var(--accent);
   color: var(--accent);
+  background: var(--accent-soft);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px var(--accent-glow);
+}
+
+.action-button:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--accent-soft);
 }
 
 .action-button:active {
   transform: translateY(1px);
+  box-shadow: none;
 }
 
 .action-button:disabled {
   cursor: default;
-  opacity: 0.55;
+  opacity: 0.5;
   transform: none;
+  box-shadow: none;
 }
 
 .action-button:disabled:hover {
   border-color: var(--line);
   color: var(--ink);
+  background: var(--pane-elevated);
+  transform: none;
+  box-shadow: none;
 }
 
 /* Secondary: the existing outlined look, for reversible/lower-stakes actions
@@ -246,15 +427,25 @@ body {
 }
 
 .action-button--primary:hover {
-  background: #b4603d;
-  border-color: #b4603d;
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
   color: var(--accent-ink);
+  box-shadow: 0 6px 18px var(--accent-glow);
+}
+
+.action-button--primary:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 2px var(--pane),
+    0 0 0 4px var(--accent);
 }
 
 .action-button--primary:disabled:hover {
   background: var(--accent);
   border-color: var(--accent);
   color: var(--accent-ink);
+  box-shadow: var(--shadow-sm);
+  transform: none;
 }
 
 /* Slider */
@@ -263,28 +454,51 @@ input[type="range"] {
   width: 100%;
   height: 4px;
   border-radius: 2px;
-  background: rgba(43, 41, 38, 0.14);
+  background: var(--line);
   outline: none;
   cursor: pointer;
+  transition: background-color var(--t-base) ease;
 }
 
 input[type="range"]::-webkit-slider-thumb {
   appearance: none;
-  width: 16px;
-  height: 16px;
+  width: 15px;
+  height: 15px;
   border-radius: 50%;
-  background: #fff;
-  border: 1.5px solid var(--accent);
-  box-shadow: 0 1px 4px rgba(43, 41, 38, 0.25);
+  background: var(--pane);
+  border: 2px solid var(--accent);
+  box-shadow: var(--shadow-sm);
+  transition:
+    box-shadow var(--t-fast) ease,
+    transform var(--t-fast) ease;
+}
+
+input[type="range"]:hover::-webkit-slider-thumb {
+  transform: scale(1.1);
+}
+
+input[type="range"]:active::-webkit-slider-thumb {
+  box-shadow: 0 0 0 6px var(--accent-glow);
+}
+
+input[type="range"]:focus-visible::-webkit-slider-thumb {
+  box-shadow: 0 0 0 4px var(--accent-soft);
 }
 
 input[type="range"]::-moz-range-thumb {
-  width: 14px;
-  height: 14px;
+  width: 13px;
+  height: 13px;
   border-radius: 50%;
-  background: #fff;
-  border: 1.5px solid var(--accent);
-  box-shadow: 0 1px 4px rgba(43, 41, 38, 0.25);
+  background: var(--pane);
+  border: 2px solid var(--accent);
+  box-shadow: var(--shadow-sm);
+  transition:
+    box-shadow var(--t-fast) ease,
+    transform var(--t-fast) ease;
+}
+
+input[type="range"]:active::-moz-range-thumb {
+  box-shadow: 0 0 0 6px var(--accent-glow);
 }
 
 /* Toggle switch (AnimateToggle) — a real checkbox underneath for a11y/
@@ -293,8 +507,8 @@ input[type="range"]::-moz-range-thumb {
 .switch {
   position: relative;
   display: inline-flex;
-  width: 38px;
-  height: 22px;
+  width: 36px;
+  height: 20px;
 }
 
 .switch input {
@@ -310,24 +524,27 @@ input[type="range"]::-moz-range-thumb {
   position: absolute;
   inset: 0;
   border-radius: 999px;
-  background: rgba(43, 41, 38, 0.14);
-  transition: background-color 0.18s ease;
+  background: var(--line-strong);
+  transition:
+    background-color var(--t-base) ease,
+    box-shadow var(--t-base) ease;
 }
 
 .switch-thumb {
   position: absolute;
   top: 2px;
   left: 2px;
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
   border-radius: 50%;
-  background: #fff;
+  background: var(--pane);
   box-shadow: var(--shadow-sm);
-  transition: transform 0.18s cubic-bezier(0.34, 1.56, 0.64, 1);
+  transition: transform 0.18s var(--ease-spring);
 }
 
 .switch input:checked ~ .switch-track {
   background: var(--accent);
+  animation: switchGlow 2.2s ease-in-out infinite;
 }
 
 .switch input:checked ~ .switch-track .switch-thumb {
@@ -335,7 +552,9 @@ input[type="range"]::-moz-range-thumb {
 }
 
 .switch input:focus-visible ~ .switch-track {
-  box-shadow: 0 0 0 2px #fff, 0 0 0 4px var(--accent);
+  box-shadow:
+    0 0 0 2px var(--pane),
+    0 0 0 4px var(--accent);
 }
 
 input[type="color"] {
@@ -344,9 +563,17 @@ input[type="color"] {
   height: 26px;
   padding: 0;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   background: none;
   cursor: pointer;
+  transition:
+    border-color var(--t-fast) ease,
+    transform var(--t-fast) ease;
+}
+
+input[type="color"]:hover {
+  transform: translateY(-1px);
+  border-color: var(--line-strong);
 }
 
 input[type="color"]::-webkit-color-swatch-wrapper {
@@ -355,7 +582,7 @@ input[type="color"]::-webkit-color-swatch-wrapper {
 
 input[type="color"]::-webkit-color-swatch {
   border: none;
-  border-radius: 5px;
+  border-radius: 4px;
 }
 
 /* --- FOLD import/export --------------------------------------------------- */
@@ -366,29 +593,36 @@ input[type="color"]::-webkit-color-swatch {
   gap: 12px;
   padding: 12px 14px;
   border: 1px solid var(--line);
-  border-radius: 10px;
-  background: #fff;
+  border-radius: var(--radius);
+  background: var(--pane-elevated);
   cursor: pointer;
-  box-shadow: var(--shadow-sm);
   transition:
-    border-color 0.15s ease,
-    box-shadow 0.15s ease,
-    transform 0.08s ease;
+    border-color var(--t-fast) ease,
+    background-color var(--t-fast) ease,
+    box-shadow var(--t-fast) ease,
+    transform var(--t-fast) ease;
 }
 
 .fold-dropzone:hover {
-  border-color: rgba(43, 41, 38, 0.22);
+  border-color: var(--line-strong);
+  transform: translateY(-1px);
+}
+
+.fold-dropzone:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
 }
 
 .fold-dropzone.drag-over {
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(201, 111, 74, 0.14);
-  transform: translateY(-1px);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+  transform: translateY(-1px) scale(1.01);
 }
 
 .fold-dropzone.has-file {
-  border-color: rgba(201, 111, 74, 0.35);
-  background: #fefaf7;
+  border-color: var(--accent);
+  background: var(--accent-soft);
 }
 
 .fold-dropzone-icon {
@@ -398,10 +632,15 @@ input[type="color"]::-webkit-color-swatch {
   justify-content: center;
   width: 30px;
   height: 30px;
-  border-radius: 8px;
-  background: var(--paper);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
   color: var(--accent);
-  font-size: 15px;
+  transition: background-color var(--t-base) ease;
+}
+
+.fold-dropzone-icon svg {
+  width: 16px;
+  height: 16px;
 }
 
 .fold-dropzone-text {
@@ -415,7 +654,7 @@ input[type="color"]::-webkit-color-swatch {
 
 .fold-dropzone-text strong {
   color: var(--ink);
-  font-weight: 550;
+  font-weight: 600;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -445,13 +684,14 @@ input[type="color"]::-webkit-color-swatch {
   margin: 8px 0 0;
   font-size: 12px;
   color: var(--error);
+  animation: shakeIn 0.35s var(--ease-out) both;
 }
 
 .fold-warnings {
   margin: 10px 0 0;
   padding: 8px 10px 8px 24px;
-  border-radius: 8px;
-  background: rgba(201, 111, 74, 0.08);
+  border-radius: var(--radius-sm);
+  background: var(--accent-soft);
   font-size: 11.5px;
   color: var(--ink-soft);
 }
@@ -480,17 +720,29 @@ input[type="color"]::-webkit-color-swatch {
   border: 1px solid var(--line);
   box-shadow: var(--shadow-md);
   font-size: 12.5px;
+  font-weight: 500;
   color: var(--ink-soft);
   z-index: 2;
+  animation:
+    fadeScaleIn var(--t-base) var(--ease-out) both,
+    pillGlow 2s ease-in-out infinite 0.3s;
 }
 
 .loading-spinner {
   width: 13px;
   height: 13px;
   border-radius: 50%;
-  border: 2px solid rgba(201, 111, 74, 0.25);
+  border: 2px solid var(--accent-soft);
   border-top-color: var(--accent);
   animation: spin 0.7s linear infinite;
+}
+
+.loading-pill--error {
+  max-width: min(420px, calc(100% - 40px));
+  color: var(--error);
+  border-color: color-mix(in srgb, var(--error) 40%, var(--line));
+  text-align: center;
+  animation: fadeScaleIn var(--t-base) var(--ease-out) both;
 }
 
 @keyframes spin {
@@ -504,12 +756,22 @@ input[type="color"]::-webkit-color-swatch {
 .pattern-view {
   position: absolute;
   inset: 0;
-  background-color: var(--pane);
-  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix type='matrix' values='0 0 0 0 0.16  0 0 0 0 0.15  0 0 0 0 0.13  0 0 0 0.04 0'/></filter><rect width='120' height='120' filter='url(%23n)'/></svg>");
+  /* --stage, not --bg: the same lighter "studio backdrop" tone the 3D
+     model sits on (see the --stage definition), so switching between the
+     3D and crease-pattern views doesn't change how the sheet is lit. */
+  background-color: var(--stage);
+  background-image: var(--noise);
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 1;
+  opacity: 1;
+  transition: opacity var(--t-base) ease;
+}
+
+.pattern-view.pattern-view--hidden {
+  opacity: 0;
+  pointer-events: none;
 }
 
 .pattern-view svg {
@@ -541,6 +803,100 @@ input[type="color"]::-webkit-color-swatch {
   border-radius: 2px;
 }
 
+/* --- Motion --------------------------------------------------------------- */
+
+@keyframes appEnter {
+  from {
+    opacity: 0;
+    transform: scale(0.995);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes sectionIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeScaleIn {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) scale(0.92);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) scale(1);
+  }
+}
+
+.pane-reopen {
+  animation-name: fadeScaleInStatic;
+}
+
+@keyframes fadeScaleInStatic {
+  from {
+    opacity: 0;
+    transform: scale(0.85);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes switchGlow {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 var(--accent-glow);
+  }
+  50% {
+    box-shadow: 0 0 8px 1px var(--accent-glow);
+  }
+}
+
+@keyframes pillGlow {
+  0%,
+  100% {
+    box-shadow: var(--shadow-md);
+  }
+  50% {
+    box-shadow:
+      var(--shadow-md),
+      0 0 16px var(--accent-glow);
+  }
+}
+
+@keyframes shakeIn {
+  from {
+    opacity: 0;
+    transform: translateX(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
 @media (max-width: 720px) {
   .app-layout {
     flex-direction: column;
@@ -549,7 +905,14 @@ input[type="color"]::-webkit-color-swatch {
   .task-pane {
     width: 100%;
     height: auto;
-    border-left: none;
+    box-shadow: none;
     border-top: 1px solid var(--line);
+  }
+
+  .task-pane.is-collapsed {
+    width: 100%;
+    height: 0;
+    padding-top: 0;
+    padding-bottom: 0;
   }
 }

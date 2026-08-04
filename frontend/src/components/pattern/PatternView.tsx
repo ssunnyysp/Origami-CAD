@@ -1,19 +1,38 @@
 import { useMemo } from "react";
 import type { CreaseAssignment, FlasherGeometry } from "../../model/types";
+import type { Theme } from "../../store/useAppStore";
 
 // Mountain folds up (blue), valley folds down (red) — same convention as the
 // 3D crease overlay. Facet edges are drawn faintly as the construction grid.
-const STROKES: Record<CreaseAssignment, { color: string; width: number }> = {
-  border: { color: "#2b2926", width: 0.1 },
-  mountain: { color: "#3560d8", width: 0.07 },
-  valley: { color: "#d84035", width: 0.07 },
-  facet: { color: "#e2ddd0", width: 0.025 },
+// Border/facet need theme-specific tones: a near-black border and pale-gray
+// facet grid both read fine on light paper but would go invisible (border)
+// or vanish into noise (facet) against a dark background.
+const STROKES: Record<Theme, Record<CreaseAssignment, { color: string; width: number }>> = {
+  light: {
+    border: { color: "#0b0e14", width: 0.1 },
+    mountain: { color: "#2563eb", width: 0.07 },
+    valley: { color: "#dc2626", width: 0.07 },
+    facet: { color: "#dde1e7", width: 0.025 },
+  },
+  dark: {
+    border: { color: "#edecea", width: 0.1 },
+    mountain: { color: "#5b9bff", width: 0.07 },
+    valley: { color: "#f87171", width: 0.07 },
+    facet: { color: "#3a3835", width: 0.025 },
+  },
 };
 
 const DRAW_ORDER: CreaseAssignment[] = ["facet", "mountain", "valley", "border"];
 
+interface Props {
+  geometry: FlasherGeometry | null;
+  theme: Theme;
+  visible: boolean;
+}
+
 // Flat 2D view of the crease pattern, like a printed folding diagram.
-export function PatternView({ geometry }: { geometry: FlasherGeometry | null }) {
+export function PatternView({ geometry, theme, visible }: Props) {
+  const strokes = STROKES[theme];
   const lines = useMemo(() => {
     if (!geometry) return null;
     const byId = new Map(geometry.pattern.vertices.map((v) => [v.id, v.position]));
@@ -34,15 +53,15 @@ export function PatternView({ geometry }: { geometry: FlasherGeometry | null }) 
   const half = (maxAbs || 1) + 0.6;
 
   return (
-    <div className="pattern-view">
+    <div className={`pattern-view${visible ? "" : " pattern-view--hidden"}`} aria-hidden={!visible}>
       <svg viewBox={`${-half} ${-half} ${2 * half} ${2 * half}`}>
         {/* Flip y so the pattern matches the 3D view's orientation. */}
         <g transform="scale(1,-1)">
           {lines.map(({ assignment, segments }) => (
             <g
               key={assignment}
-              stroke={STROKES[assignment].color}
-              strokeWidth={STROKES[assignment].width}
+              stroke={strokes[assignment].color}
+              strokeWidth={strokes[assignment].width}
               strokeLinecap="round"
             >
               {segments.map((s) => (
@@ -54,10 +73,10 @@ export function PatternView({ geometry }: { geometry: FlasherGeometry | null }) 
       </svg>
       <div className="pattern-legend">
         <span>
-          <i style={{ background: "#3560d8" }} /> mountain
+          <i style={{ background: strokes.mountain.color }} /> mountain
         </span>
         <span>
-          <i style={{ background: "#d84035" }} /> valley
+          <i style={{ background: strokes.valley.color }} /> valley
         </span>
       </div>
     </div>

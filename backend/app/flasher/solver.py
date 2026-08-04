@@ -117,14 +117,37 @@ RELAX_SUBSTEPS_PER_RING = 100 / 3  # relaxation substeps per frame, scaled by
 # largest preset (31x31, 15 rings) take minutes instead of seconds for
 # diminishing convergence return; the cap trades some residual strain on
 # the biggest presets for a solve that finishes in a reasonable time.
-LENGTH_ITERS_PER_RING = 25 / 3
+LENGTH_ITERS_PER_RING = 25 / 6  # halved from 25/3: on the wrap-pinwheel
+# pattern (which does not rigidly close — see generator.py's module
+# docstring — real paper flexes to fold it, this solver's rigid triangles
+# don't), _project_lengths ran ~16 correction passes per single dihedral-
+# force kick every substep. That 16:1 imbalance let length correction win
+# tugs-of-war it shouldn't: measured directly, it silently flips a crease's
+# effective fold direction across the mountain/valley (±180°) divide for a
+# meaningful fraction of hinges, since the wrapped angle error always takes
+# the *locally shortest* path back toward the target — which for a hinge
+# already pushed to the wrong side of ±180° is the path that drives it
+# FURTHER wrong, not back. Halving length correction's relative pull (still
+# capped by MAX_LENGTH_ITERS below, so grids at/above ~4 rings are
+# unaffected either way) measurably improves mountain/valley fidelity on the
+# default 7×7 preset (rings=3, the one grid size this constant actually
+# changes) with only a small strain cost.
 MAX_RELAX_SUBSTEPS = 90
 MAX_LENGTH_ITERS = 16
 LENGTH_RELAX = 0.9
 PREV_BLEND = 0.5  # weight of the previous frame when seeding relaxation
 MAX_STEP_PER_FRAME = 0.35  # per-vertex displacement cap between frames —
 # makes a discontinuous jump ("pulse") impossible regardless of how far the
-# raw SLERP target moves in a single foldness step
+# raw SLERP target moves in a single foldness step. This is a FLOOR: the
+# effective cap is scaled up with sheet size in __init__ (see
+# self.max_step_per_frame), because a corner of an n×n sheet must travel
+# ~(n/2)·√2 to reach the ~unit-scale stow, and over STEPS frames a fixed 0.35
+# cap budgets only 0.35·STEPS ≈ 21 units of travel — right at the corner
+# distance for the 31×31 preset, so it could never finish folding (the
+# original "big flashers don't fold into a cube" bug). Small sheets keep this
+# exact validated value since the scaled term stays below it for them.
+STEP_BUDGET_MARGIN = 1.5  # rate-limit budget = MARGIN × farthest-vertex travel,
+# so the fold always completes with headroom for the relaxation/blend drag
 MIN_SEPARATION = 0.08  # closest two flat-far vertices are allowed to get
 REPEL_GAIN = 1.0
 REPEL_FLAT_EXCLUDE = 1.6  # skip pairs this close in the FLAT pattern — two
@@ -156,6 +179,14 @@ class FlasherFoldSolver:
         self.length_iters = min(MAX_LENGTH_ITERS, max(10, round(LENGTH_ITERS_PER_RING * rings)))
         self.global_spin_radians = math.radians(
             min(MAX_GLOBAL_SPIN_DEGREES, GLOBAL_SPIN_DEGREES_PER_RING * rings)
+        )
+        # Rate-limit budget must let the farthest-from-hub vertex reach the
+        # stow within STEPS frames; scale the per-frame cap with the sheet's
+        # actual flat reach (robust to any pattern, incl. imported ones),
+        # floored at the tuned MAX_STEP_PER_FRAME so small sheets are unchanged.
+        flat_reach = float(np.max(np.linalg.norm(self.flat[:, :2], axis=1)))
+        self.max_step_per_frame = max(
+            MAX_STEP_PER_FRAME, STEP_BUDGET_MARGIN * flat_reach / STEPS
         )
 
         assign = {
@@ -369,7 +400,7 @@ class FlasherFoldSolver:
                 X = (1 - PREV_BLEND) * X + PREV_BLEND * X_prev
                 d = X - X_prev
                 dist = np.linalg.norm(d, axis=1, keepdims=True)
-                scale = np.minimum(1.0, MAX_STEP_PER_FRAME / np.maximum(dist, 1e-9))
+                scale = np.minimum(1.0, self.max_step_per_frame / np.maximum(dist, 1e-9))
                 X = X_prev + d * scale
 
             vel = np.zeros_like(X)
