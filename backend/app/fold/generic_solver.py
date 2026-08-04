@@ -21,8 +21,8 @@ Generalizations relative to solver.py:
   which is the generic analogue for a pattern with no ring structure.
 - MAX_ANGLE is capped more conservatively (110°) than the flasher's tuned
   130°, since this runs on topology this code has never been validated
-  against — see docs/FLASHER_NOTES.md's discussion of why pushing the target
-  angle too far causes local crumpling instead of a uniform fold.
+  against: pushing the target angle too far causes local crumpling instead
+  of a uniform fold.
 """
 
 from __future__ import annotations
