@@ -33,7 +33,7 @@ project didn't invent the geometry, just tried to build a decent tool for
 playing with it. A few things worth knowing about if you want to go deeper
 than this README:
 
--**Jeremy Shafer [YouTube](https://www.youtube.com/@jeremyshaferorigami/videos)**
+- **Jeremy Shafer [YouTube](https://www.youtube.com/@jeremyshaferorigami/videos)**
   is a American entertainer and origamist, a major inspiration for this project
   with his many flasher tutorials and crease patterns.
 - **Amanda Ghassaei's [Origami Simulator](https://origamisimulator.org)** is
