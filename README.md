@@ -19,94 +19,6 @@ Three.js) frontend only renders.
   plain — like real origami paper
 - Ships with 4 curated presets (7×7, 15×15, 23×23, 31×31 "Big Bang")
 
-## Architecture
-
-```
-frontend/   Vite + React + TypeScript + @react-three/fiber — rendering and UI only
-backend/    FastAPI — presets, crease-pattern generation, and the fold solver
-```
-
-The fold solver is too expensive to run at animation rate in the browser, and the
-client has zero fold logic. Instead the backend solves the **entire fold trajectory
-once** per parameter set: `POST /api/flasher/geometry` returns the crease pattern plus
-121 frames of vertex positions (foldness 0.00 → 1.00). The frontend interpolates between
-adjacent frames at render time with a Catmull-Rom spline (C1-continuous, so the motion has
-no velocity kinks at frame boundaries — a linear lerp was visibly jerky at this fold depth).
-Dragging the slider or animating is therefore pure client-side interpolation with zero
-network traffic per frame — a new request only fires when the
-structural parameters (grid size, etc.) change, and `GeometryRequest` is `@lru_cache`d
-server-side so re-selecting a previously-seen preset is free.
-
-API:
-
-- `GET /api/presets` — curated flasher presets
-- `POST /api/flasher/geometry` — flasher params in, crease pattern + fold-sweep frames out
-- `GET /api/health` — liveness check
-- `POST /api/fold/import` — parse an uploaded `.fold` file (see FOLD file support below)
-- `POST /api/fold/export` — serialize the current pattern + folded pose to `.fold`
-
-## How folding works
-
-The crease pattern (`generator.py`) is pure geometry with no notion of time or folding:
-each of the four regions has a 45° diagonal running from the hub corner out toward the
-sheet's corner, an accordion of horizontal/vertical **pleat** folds (mountain/valley
-alternating outward from the hub) filling the hub-side of that diagonal, and an
-uncreased flap on the outer side that wraps around the hub as the accordion compresses.
-The hub cell's four boundary edges fold ~90° as wall bends.
-
-The solver (`solver.py`) is a forward position-based-dynamics simulation — the same
-family of approach as origamisimulator.org — driven from the flat sheet, not a rigid
-target composed and interpolated toward. Each frame ramps every crease's target angle a
-little further and settles the sheet with a few constraint-projection passes (edge
-length, self-collision, then dihedral angle). Two things about *how* the dihedral
-targets are weighted are what make the fold actually land on the crease pattern instead
-of crumpling:
-
-1. **The pleats (and hub-wall bends) lead; the diagonal is only a passive aid.** The
-   diagonal is not meant to be a hard-driven fold — if it's weighted as strongly as the
-   pleats it fights them and the region crumples instead of forming its wave. So the
-   diagonal is driven at low weight (`DIAGONAL_WEIGHT`): it folds only as much as the
-   surrounding pleats leave room for.
-2. **Facets (the triangulation diagonals inside each cell) are held close to flat**
-   (`FACET_WEIGHT`), so cells stay rigid panels and the bending happens sharply *on* the
-   crease lines rather than smeared across a wavy surface.
-
-**The flasher stows flat** — it compresses radially into a low disc sitting just under
-the hub plane, the way the paper model does, rather than growing into a tower, tilting,
-or dishing in the middle. That is the binding constraint on the solver's tuning, and it
-is checked three ways: stowed height, tilt of the best-fit plane (0.0° on every preset),
-and the radial height profile from hub to rim.
-
-Within that limit, the sheet must **wrap rotationally** — every ring turning about the
-hub, progressively more further out, so it winds up clockwise/counter-clockwise like the
-paper model. That is not automatic: the sheet can also just crush straight inward, which
-buckles the rings and reads as crumpling, and the two are near-equally valid solutions to
-the same constraints. The solver breaks that tie with a small coherent swirl applied as
-the fold progresses (`SEED_SWIRL`), and caps how hard the creases are driven (`CAP`),
-since past a certain point the innermost ring starts turning against the wrap. Notably the
-swirl *lowers* edge strain, confirming the spiral is the natural mode rather than an
-imposed one — and a stronger swirl stabilises it enough to allow a deeper fold. How hard
-each preset is driven, how much it is settled, and how much it is swirled are set together
-per grid size by a small table (`FOLD_PROFILE`), because each size runs into a different
-limit first: the smallest into facet flex, the middle into stow height, the largest into
-strain and dishing.
-
-Self-collision is **vertex-versus-triangle**, not vertex-versus-vertex. A vertex-pair test
-can only stop layers passing through each other by holding them far apart, which inflates
-the stow, and it structurally cannot catch the crossing that actually happens here — an
-edge slicing through the middle of a facet with no two vertices ever close. A real
-point-to-triangle test prevents penetration directly, so layers stay thin and the stow
-stays flat. Bigger sheets also get more settling passes, since the fold propagates outward
-from the pinned hub one ring at a time.
-
-Every preset measures zero true self-intersection across the whole sweep, 98–100%
-mountain/valley sign fidelity, a coherent spiral (rotation growing outward, ~61–77° at
-the rim), and a stow height of 1.1–1.8 units against a flat-sheet cell size of 1.0. Edge
-strain runs ~7–9%: the pattern is not perfectly rigidly foldable (a 45° diagonal can't
-span a non-square region corner-to-corner — see the generator's docstring), so some of
-that incompatibility has to go somewhere. See `solver.py`'s module docstring for the full
-reasoning and measured numbers.
-
 ## Project layout
 
 - `backend/app/flasher/generator.py` — crease-pattern generation (pure geometry, no physics)
@@ -139,17 +51,6 @@ interchange format used by Origami Simulator, Rabbit Ear, and academic rigid-ori
 - See `backend/app/fold/` for the parser/writer and `backend/scripts/validate_fold.py`
   for the round-trip + sample-file validation harness.
 
-## Known limitations
-
-- The pattern does not rigidly close to an exact box (see "How folding works" above) —
-  this is a geometric property of the current pattern, verified directly, not a bug.
-- Larger presets take longer to solve: roughly 1s / 36s / 93s / 128s for 7×7 / 15×15 / 23×23 / 31×31 — the deep fold
-  needs many settling passes, and this is the main cost of how compact the stow is.
-  `FOLD_PROFILE` in `solver.py` trades the two against each other. The result is cached per parameter set, so this cost is paid once per preset
-  rather than per frame, and the UI shows a "Solving fold…" state meanwhile.
-- `backend/app/flasher/fold_engine.py` is unused dead code left over from an earlier
-  kinematic-wrap approach that the current solver replaced — not imported anywhere.
-
 ## Development
 
 Backend (Python 3.12+):
@@ -175,4 +76,4 @@ npm run build         # tsc -b && vite build
 npm run lint          # oxlint
 ```
 
-Open http://localhost:5173 once both are running. There is no test suite in this repo.
+Open http://localhost:5173 once both are running.
