@@ -5,26 +5,35 @@ let a large flat sheet collapse down into a small, tidy bundle wrapped around
 a central hub. Drag a slider and watch it fold in 3D, anywhere from
 completely flat to fully stowed.
 
+![A 31×31 flasher pattern folding down into its stowed form](assets/fold-animation.gif)
+
 The backend (Python, FastAPI) owns all the geometry and fold physics. The
 frontend (React, Three.js) just renders whatever the backend hands it — there's
 no fold logic on the client at all.
 
-## What it does
+## Key features
 
-- Generates a wrap-pinwheel flasher crease pattern on an N×N grid (N has to
-  be odd, so there's one clean square cell sitting right at the center). The
-  pattern itself isn't procedurally invented — it's transcribed from a real
-  paper model, quartered into four rotationally symmetric regions around the
-  hub. The full spec lives in `backend/app/flasher/generator.py`.
-- Lets you scrub through the fold with a "foldness" slider, from 0 (flat) to
-  1 (fully folded), or animate it automatically.
-- Draws a CAD-style crease overlay on top of the model — mountain folds in
-  yellow, valley folds in red, borders in a dark neutral — and fades it out
-  as the paper folds, so the fully-stowed model reads as plain folded paper
-  rather than a wireframe.
-- Renders the paper two-sided: the front takes whatever color you pick, the
-  back stays a plain paper tone, the way real origami paper looks.
-- Ships with four presets to try: 7×7, 15×15, 23×23, and a big 31×31 one.
+- **Parametric flasher generation.** A wrap-pinwheel crease pattern on an
+  N×N grid (N has to be odd, so there's one clean square cell sitting right
+  at the center). The pattern itself isn't procedurally invented — it's
+  transcribed from a real paper model, quartered into four rotationally
+  symmetric regions around the hub. The full spec lives in
+  `backend/app/flasher/generator.py`.
+- **Live fold animation.** Scrub through the fold with a "foldness" slider,
+  from 0 (flat) to 1 (fully folded), or let it animate automatically. The
+  whole fold trajectory is solved server-side once and interpolated smoothly
+  on the client, so dragging the slider is instant.
+- **CAD-style crease overlay.** Mountain folds in yellow, valley folds in
+  red, borders in a dark neutral — fading out as the paper folds so the
+  fully-stowed model reads as plain folded paper rather than a wireframe.
+
+  ![The flat crease pattern for a 31×31 flasher, with mountain and valley folds color-coded](assets/screenshot-pattern.png)
+
+- **Two-sided paper rendering.** The front takes whatever color you pick,
+  the back stays a plain paper tone — the way real origami paper looks.
+- **FOLD file import/export**, so patterns can move between this tool,
+  Origami Simulator, and other rigid-origami software (see below).
+- **Four presets to try**: 7×7, 15×15, 23×23, and a big 31×31 one.
 
 ## Inspiration
 
