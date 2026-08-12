@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel, Field, field_validator
 
+from .flasher.anatomy import CellAnatomy
 from .flasher.generator import CreasePattern, FlasherParams
 
 
@@ -92,6 +93,26 @@ class GeometryResponse(BaseModel):
     # the client lerps between adjacent frames for arbitrary foldness values.
     foldnessSamples: list[float]
     frames: list[list[float]]
+
+
+class CellAnatomyOut(BaseModel):
+    cx: int
+    cy: int
+    ring: int
+    kind: str
+
+    @classmethod
+    def from_cell(cls, c: CellAnatomy) -> "CellAnatomyOut":
+        return cls(cx=c.cx, cy=c.cy, ring=c.ring, kind=c.kind)
+
+
+class PatternAnatomyResponse(BaseModel):
+    """Cell-by-cell crease classification for the crease-pattern-anatomy
+    reference view — see /api/flasher/anatomy."""
+
+    n: int
+    h: int  # hub cell's (cx, cy) index, both axes
+    cells: list[CellAnatomyOut]
 
 
 # --- FOLD import/export (see app/fold/) -------------------------------------

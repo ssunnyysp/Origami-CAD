@@ -803,14 +803,15 @@ input[type="color"]::-webkit-color-swatch {
   border-radius: 2px;
 }
 
-/* --- Crease pattern anatomy (design/reference tool overlay) --------------- */
-/* Ported from a standalone design artifact — a menu item in the control
-   panel opens it as a full-screen overlay above the app layout. Its cell/
-   region colors are unrelated to the app's --accent/--ink palette (they
-   encode crease *kinds*, not app UI state), so they're declared as their
-   own set of custom properties scoped to .anatomy rather than reusing the
-   app-wide tokens, the same way Scene.tsx/CreaseLines.tsx/PatternView.tsx
-   keep their own literal color values instead of reading CSS vars. */
+/* --- Crease pattern anatomy (reference view overlay) ----------------------- */
+/* A menu item in the control panel opens this as a full-screen overlay above
+   the app layout. Cell data comes live from GET /api/flasher/anatomy (see
+   backend/app/flasher/anatomy.py), derived from the actual generate_flasher
+   output rather than any hand-authored snapshot. Its cell colors encode
+   crease *kinds*, not app UI state, so they're declared as their own set of
+   custom properties scoped to .anatomy rather than reusing the app-wide
+   tokens — the same way Scene.tsx/CreaseLines.tsx/PatternView.tsx keep their
+   own literal color values instead of reading CSS vars. */
 
 .anatomy-overlay {
   position: fixed;
@@ -840,18 +841,8 @@ input[type="color"]::-webkit-color-swatch {
   --a-diag-main-ink: #eaf1ff;
   --a-diag-anti: #f2794f;
   --a-diag-anti-ink: #fff0e9;
-  --a-arm: #5cb08d;
-  --a-arm-ink: #eafff5;
-  --a-plain: #302e2a;
-  --a-plain-line: #464339;
-  --a-r1: #9b8afb;
-  --a-r1-ink: #2a2145;
-  --a-r2: #38c6a8;
-  --a-r2-ink: #08302a;
-  --a-r3: #f2739c;
-  --a-r3-ink: #400318;
-  --a-r4: #f2b03e;
-  --a-r4-ink: #3a2705;
+  --a-pleat: #5cb08d;
+  --a-pleat-ink: #eafff5;
 
   font-family: "Inter", -apple-system, "Segoe UI", Roboto, sans-serif;
   color: var(--a-text);
@@ -881,18 +872,8 @@ input[type="color"]::-webkit-color-swatch {
   --a-diag-main-ink: #ffffff;
   --a-diag-anti: #c1502b;
   --a-diag-anti-ink: #ffffff;
-  --a-arm: #1f7a56;
-  --a-arm-ink: #ffffff;
-  --a-plain: #eeeae0;
-  --a-plain-line: #ddd7c8;
-  --a-r1: #6a54e8;
-  --a-r1-ink: #ffffff;
-  --a-r2: #12876d;
-  --a-r2-ink: #ffffff;
-  --a-r3: #c23368;
-  --a-r3-ink: #ffffff;
-  --a-r4: #a5720c;
-  --a-r4-ink: #ffffff;
+  --a-pleat: #1f7a56;
+  --a-pleat-ink: #ffffff;
 }
 
 .anatomy-titlebar {
@@ -936,42 +917,12 @@ input[type="color"]::-webkit-color-swatch {
   border-color: var(--a-text-faint);
 }
 
-.anatomy-tabs {
-  display: flex;
-  gap: 2px;
-  background: var(--a-pane-2);
-  border: 1px solid var(--a-line);
-  border-radius: 9px;
-  padding: 3px;
-  margin: 18px 0 16px;
-  width: fit-content;
-}
-
-.anatomy-tabs button,
-.anatomy-subtabs button {
-  font: inherit;
-  font-size: 13.5px;
-  font-weight: 500;
-  color: var(--a-text-soft);
-  background: transparent;
-  border: none;
-  border-radius: 6px;
-  padding: 7px 14px;
-  cursor: pointer;
-}
-
-.anatomy-tabs button.active,
-.anatomy-subtabs button.active {
-  background: var(--a-accent);
-  color: var(--a-accent-ink);
-}
-
 .anatomy-toolbar {
   display: flex;
   flex-wrap: wrap;
   gap: 18px;
   align-items: center;
-  margin-bottom: 18px;
+  margin: 18px 0;
   padding: 12px 14px;
   background: var(--a-pane);
   border: 1px solid var(--a-line);
@@ -1049,6 +1000,13 @@ input[type="color"]::-webkit-color-swatch {
   padding: 18px;
   box-shadow: var(--shadow-md);
   flex: 0 0 auto;
+  min-width: 200px;
+  min-height: 120px;
+}
+
+.anatomy-status {
+  color: var(--a-text-faint);
+  font-size: 13px;
 }
 
 .anatomy-grid-outer {
@@ -1080,17 +1038,18 @@ input[type="color"]::-webkit-color-swatch {
 
 .anatomy-cell {
   border-radius: 3px;
-  background: var(--a-plain);
-  border: 1px solid var(--a-plain-line);
+  background: var(--a-pleat);
+  border: 1px solid var(--a-line);
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
   font-family: var(--mono);
   font-size: 9px;
-  color: var(--a-text-faint);
+  color: var(--a-pleat-ink);
   transition: transform 0.08s ease;
   padding: 0;
+  opacity: 0.55;
 }
 
 .anatomy-cell:hover,
@@ -1099,6 +1058,7 @@ input[type="color"]::-webkit-color-swatch {
   z-index: 2;
   outline: 2px solid var(--a-accent);
   outline-offset: 1px;
+  opacity: 1;
 }
 
 .anatomy-cell.hub {
@@ -1106,51 +1066,31 @@ input[type="color"]::-webkit-color-swatch {
   color: var(--a-hub-ink);
   border-color: var(--a-hub);
   font-weight: 600;
+  opacity: 1;
 }
 .anatomy-cell.diag_main {
   background: var(--a-diag-main);
   color: var(--a-diag-main-ink);
   border-color: var(--a-diag-main);
+  opacity: 1;
 }
 .anatomy-cell.diag_anti {
   background: var(--a-diag-anti);
   color: var(--a-diag-anti-ink);
   border-color: var(--a-diag-anti);
+  opacity: 1;
 }
-.anatomy-cell.arm {
-  background: var(--a-arm);
-  color: var(--a-arm-ink);
-  border-color: var(--a-arm);
+.anatomy-cell.pleat {
+  opacity: 0.85;
+}
+.anatomy-cell.flap {
+  background: var(--a-line-soft);
+  color: var(--a-text-faint);
+  border-color: var(--a-line);
+  opacity: 1;
 }
 .anatomy-cell.selected {
   outline: 2px solid var(--a-text);
-  outline-offset: 1px;
-}
-.anatomy-cell.region-editable {
-  cursor: cell;
-}
-.anatomy-cell.r1 {
-  background: var(--a-r1);
-  color: var(--a-r1-ink);
-  border-color: var(--a-r1);
-}
-.anatomy-cell.r2 {
-  background: var(--a-r2);
-  color: var(--a-r2-ink);
-  border-color: var(--a-r2);
-}
-.anatomy-cell.r3 {
-  background: var(--a-r3);
-  color: var(--a-r3-ink);
-  border-color: var(--a-r3);
-}
-.anatomy-cell.r4 {
-  background: var(--a-r4);
-  color: var(--a-r4-ink);
-  border-color: var(--a-r4);
-}
-.anatomy-cell.pending {
-  outline: 2px dashed var(--a-text);
   outline-offset: 1px;
 }
 
@@ -1164,23 +1104,6 @@ input[type="color"]::-webkit-color-swatch {
   stroke-width: 1.5;
   stroke-dasharray: 5 4;
   opacity: 0.55;
-}
-.anatomy-diag-lines line {
-  stroke: var(--a-accent);
-  stroke-width: 2;
-  stroke-dasharray: none;
-  opacity: 0.85;
-}
-.anatomy-fold-lines line {
-  stroke-width: 1.6;
-  stroke-dasharray: none;
-  opacity: 0.8;
-}
-.anatomy-fold-lines line.mountain {
-  stroke: var(--a-diag-main);
-}
-.anatomy-fold-lines line.valley {
-  stroke: var(--a-diag-anti);
 }
 
 .anatomy-side {
@@ -1234,11 +1157,8 @@ input[type="color"]::-webkit-color-swatch {
 .anatomy-swatch.diag_anti {
   background: var(--a-diag-anti);
 }
-.anatomy-swatch.arm {
-  background: var(--a-arm);
-}
-.anatomy-swatch.plain {
-  background: var(--a-plain);
+.anatomy-swatch.pleat {
+  background: var(--a-pleat);
 }
 
 .anatomy-legend-text b {
@@ -1286,221 +1206,6 @@ input[type="color"]::-webkit-color-swatch {
 .anatomy-note b {
   color: var(--a-text);
   font-weight: 600;
-}
-
-.anatomy-subtabs {
-  display: flex;
-  gap: 2px;
-  background: var(--a-pane-2);
-  border: 1px solid var(--a-line);
-  border-radius: 8px;
-  padding: 3px;
-  width: fit-content;
-  margin-bottom: 14px;
-}
-.anatomy-subtabs button {
-  font-size: 12.5px;
-  padding: 6px 12px;
-}
-
-.anatomy-region-palette {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-.anatomy-region-btn {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  width: 100%;
-  font: inherit;
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--a-text);
-  background: var(--a-pane-2);
-  border: 1px solid var(--a-line);
-  border-radius: 8px;
-  padding: 8px 10px;
-  cursor: pointer;
-  text-align: left;
-}
-.anatomy-region-btn:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
-.anatomy-region-swatch {
-  width: 14px;
-  height: 14px;
-  border-radius: 4px;
-  flex: 0 0 auto;
-  display: inline-block;
-}
-.anatomy-region-swatch.r1 {
-  background: var(--a-r1);
-}
-.anatomy-region-swatch.r2 {
-  background: var(--a-r2);
-}
-.anatomy-region-swatch.r3 {
-  background: var(--a-r3);
-}
-.anatomy-region-swatch.r4 {
-  background: var(--a-r4);
-}
-.anatomy-region-btn .anatomy-r-note {
-  margin-left: auto;
-  font-size: 11.5px;
-  color: var(--a-text-faint);
-  font-family: var(--mono);
-}
-
-.anatomy-util-row {
-  display: flex;
-  gap: 8px;
-  margin-top: 10px;
-}
-.anatomy-util-btn {
-  flex: 1;
-  font: inherit;
-  font-size: 12.5px;
-  font-weight: 500;
-  color: var(--a-text-soft);
-  background: transparent;
-  border: 1px solid var(--a-line);
-  border-radius: 7px;
-  padding: 6px 8px;
-  cursor: pointer;
-}
-.anatomy-util-btn:hover {
-  color: var(--a-text);
-  border-color: var(--a-text-faint);
-}
-
-.anatomy-summary {
-  font-family: var(--mono);
-  font-size: 12px;
-  line-height: 1.7;
-  color: var(--a-text-soft);
-  white-space: pre-wrap;
-  background: var(--a-line-soft);
-  border-radius: 7px;
-  padding: 10px 12px;
-  margin: 0 0 10px;
-}
-.anatomy-copy-btn {
-  width: 100%;
-  font: inherit;
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--a-accent-ink);
-  background: var(--a-accent);
-  border: none;
-  border-radius: 8px;
-  padding: 9px;
-  cursor: pointer;
-}
-
-.anatomy-vtx-layer {
-  position: absolute;
-  inset: 0;
-  z-index: 3;
-  pointer-events: none;
-}
-.anatomy-vtx-dot {
-  position: absolute;
-  width: 12px;
-  height: 12px;
-  margin-left: -6px;
-  margin-top: -6px;
-  border-radius: 50%;
-  background: var(--a-pane);
-  border: 1.5px solid var(--a-text-faint);
-  cursor: crosshair;
-  padding: 0;
-  pointer-events: auto;
-}
-.anatomy-vtx-dot:hover {
-  border-color: var(--a-accent);
-  background: var(--a-accent);
-  transform: scale(1.3);
-}
-.anatomy-vtx-dot.picked {
-  border-color: var(--a-accent);
-  background: var(--a-accent);
-  box-shadow: 0 0 0 3px rgba(91, 155, 255, 0.35);
-}
-
-.anatomy-diag-status {
-  font-size: 12.5px;
-  margin: 8px 0 0;
-  min-height: 16px;
-}
-.anatomy-diag-status.err {
-  color: var(--a-diag-anti);
-}
-.anatomy-diag-status.ok {
-  color: var(--a-arm);
-}
-
-.anatomy-seg-layer {
-  position: absolute;
-  inset: 0;
-  z-index: 2;
-  pointer-events: none;
-}
-.anatomy-seg-btn {
-  position: absolute;
-  padding: 0;
-  border: none;
-  cursor: pointer;
-  pointer-events: auto;
-  border-radius: 2px;
-  background: var(--a-plain-line);
-  opacity: 0.55;
-}
-.anatomy-seg-btn:hover {
-  opacity: 1;
-  outline: 1.5px solid var(--a-accent);
-}
-.anatomy-seg-btn.mountain {
-  background: var(--a-diag-main);
-  opacity: 0.9;
-}
-.anatomy-seg-btn.valley {
-  background: var(--a-diag-anti);
-  opacity: 0.9;
-}
-.anatomy-seg-msg {
-  position: absolute;
-  top: 8px;
-  left: 8px;
-  font-size: 12.5px;
-  color: var(--a-diag-anti);
-}
-
-.anatomy-line-legend {
-  display: flex;
-  gap: 14px;
-  font-size: 12px;
-  color: var(--a-text-soft);
-  margin-top: 8px;
-}
-.anatomy-line-legend span {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-}
-.anatomy-line-legend i {
-  width: 12px;
-  height: 3px;
-  border-radius: 2px;
-  display: inline-block;
-}
-.anatomy-line-legend i.mountain {
-  background: var(--a-diag-main);
-}
-.anatomy-line-legend i.valley {
-  background: var(--a-diag-anti);
 }
 
 /* --- Motion --------------------------------------------------------------- */

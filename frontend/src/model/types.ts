@@ -97,3 +97,24 @@ export interface FoldImportResponse {
   selectedFrameIndex: number;
   warnings: string[];
 }
+
+// --- Crease pattern anatomy (reference view) --------------------------------
+// Response of GET /api/flasher/anatomy: a cell-by-cell crease classification
+// derived straight from generate_flasher's own output (see
+// backend/app/flasher/anatomy.py), so it can never drift from the actual
+// crease pattern the app folds.
+
+export type CellAnatomyKind = "hub" | "diag_main" | "diag_anti" | "pleat" | "flap";
+
+export interface CellAnatomy {
+  cx: number;
+  cy: number;
+  ring: number;
+  kind: CellAnatomyKind;
+}
+
+export interface PatternAnatomy {
+  n: number;
+  h: number;
+  cells: CellAnatomy[];
+}

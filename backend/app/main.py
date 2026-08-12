@@ -11,13 +11,15 @@ from functools import lru_cache
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
-from .flasher.generator import generate_flasher
+from .flasher.anatomy import classify_cells
+from .flasher.generator import FlasherParams, generate_flasher
 from .flasher.solver import solve_sweep
 from .fold.errors import FoldValidationError
 from .fold.exporter import build_fold_document
 from .fold.importer import import_fold_document
 from .presets import PRESETS
 from .schemas import (
+    CellAnatomyOut,
     CreasePatternOut,
     FoldExportRequest,
     FoldFrameInfo,
@@ -25,6 +27,7 @@ from .schemas import (
     FoldImportResponse,
     GeometryRequest,
     GeometryResponse,
+    PatternAnatomyResponse,
 )
 
 app = FastAPI(title="Origami CAD API")
@@ -61,6 +64,31 @@ def get_geometry(request: GeometryRequest) -> GeometryResponse:
     # GeometryRequest is a frozen-shaped value object, so identical parameter
     # sets (e.g. re-selecting a preset) are served from cache.
     return _solve_geometry(request)
+
+
+@lru_cache(maxsize=32)
+def _classify_pattern(grid_divisions: int) -> PatternAnatomyResponse:
+    # layer_gap_ratio/height_ratio don't affect generate_flasher (pure crease
+    # geometry, no physics) — see the FlasherParams docstring — so any value
+    # is fine here.
+    pattern = generate_flasher(FlasherParams(grid_divisions=grid_divisions, layer_gap_ratio=0.1, height_ratio=0.9))
+    cells = classify_cells(pattern, grid_divisions)
+    h = (grid_divisions - 1) // 2
+    return PatternAnatomyResponse(
+        n=grid_divisions, h=h, cells=[CellAnatomyOut.from_cell(c) for c in cells]
+    )
+
+
+@app.get("/api/flasher/anatomy")
+def get_pattern_anatomy(gridDivisions: int) -> PatternAnatomyResponse:
+    """Cell-by-cell crease classification for the crease-pattern-anatomy
+    reference view — derived straight from generate_flasher's own output, so
+    it can never drift from the actual crease pattern (see app/flasher/anatomy.py)."""
+    if gridDivisions % 2 != 1:
+        raise HTTPException(status_code=422, detail="gridDivisions must be odd")
+    if not (7 <= gridDivisions <= 41):
+        raise HTTPException(status_code=422, detail="gridDivisions must be between 7 and 41")
+    return _classify_pattern(gridDivisions)
 
 
 @app.get("/api/health")
