@@ -36,6 +36,7 @@ interface AppState {
   animating: boolean;
   viewMode: "3d" | "pattern";
   theme: Theme;
+  anatomyOpen: boolean;
   showGrid: boolean;
   paperColor: string;
   roughness: number;
@@ -61,6 +62,7 @@ interface AppState {
   setAnimating: (v: boolean) => void;
   setPaperColor: (c: string) => void;
   setViewMode: (m: "3d" | "pattern") => void;
+  setAnatomyOpen: (v: boolean) => void;
   toggleTheme: () => void;
   setShowGrid: (v: boolean) => void;
   selectPreset: (id: string) => void;
@@ -91,6 +93,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   animating: false,
   viewMode: "3d",
   theme: loadStoredTheme(),
+  anatomyOpen: false,
   showGrid: loadStoredShowGrid(),
   paperColor: "#d97757",
   roughness: 0.8,
@@ -117,6 +120,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   setAnimating: (v) => set({ animating: v }),
   setPaperColor: (c) => set({ paperColor: c }),
   setViewMode: (m) => set({ viewMode: m, animating: false }),
+  setAnatomyOpen: (v) => set({ anatomyOpen: v }),
   toggleTheme: () =>
     set((state) => {
       const theme: Theme = state.theme === "dark" ? "light" : "dark";
