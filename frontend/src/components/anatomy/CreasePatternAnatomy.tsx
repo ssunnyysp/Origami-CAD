@@ -88,6 +88,11 @@ export function CreasePatternAnatomy({ onClose }: Props) {
   const n = data?.n ?? currentN;
   const cellPx = n <= 9 ? 34 : n <= 13 ? 28 : n <= 23 ? 20 : 15;
   const total = cellPx * n + 2 * (n - 1);
+  // Grid-vertex (0..n) -> pixel, matching the cell grid's own gap spacing.
+  const vpx = (v: number) => (v === 0 ? 0 : v === n ? total : v * (cellPx + 2) - 1);
+  const vpy = (v: number) => (v === n ? 0 : v === 0 ? total : (n - v) * (cellPx + 2) - 1);
+
+  const diagonalSegments = data?.cells.filter((c) => c.segment) ?? [];
 
   const rows: number[] = [];
   for (let cy = n - 1; cy >= 0; cy--) rows.push(cy);
@@ -180,10 +185,20 @@ export function CreasePatternAnatomy({ onClose }: Props) {
                       );
                     }),
                   )}
-                  {showDiag && (
+                  {showDiag && diagonalSegments.length > 0 && (
                     <svg className="anatomy-diagonals" viewBox={`0 0 ${total} ${total}`}>
-                      <line x1={0} y1={0} x2={total} y2={total} />
-                      <line x1={total} y1={0} x2={0} y2={total} />
+                      {diagonalSegments.map((c) => {
+                        const [p0, p1] = c.segment!;
+                        return (
+                          <line
+                            key={`${c.cx},${c.cy}`}
+                            x1={vpx(p0.x)}
+                            y1={vpy(p0.y)}
+                            x2={vpx(p1.x)}
+                            y2={vpy(p1.y)}
+                          />
+                        );
+                      })}
                     </svg>
                   )}
                 </div>
@@ -217,17 +232,6 @@ export function CreasePatternAnatomy({ onClose }: Props) {
               <LegendRow swatchClass="diag_main" title="Diagonal — main" desc="bottom-left–top-right half" />
               <LegendRow swatchClass="diag_anti" title="Diagonal — anti" desc="bottom-right–top-left half" />
               <LegendRow swatchClass="pleat" title="Pleat" desc="touches a real mountain/valley crease" />
-            </div>
-
-            <div className="anatomy-panel">
-              <h2>What the colors show</h2>
-              <p className="anatomy-note">
-                The <b>blue</b> and <b>orange</b> cells sit exactly on the two diagonals through the
-                hub, splitting the sheet into <b>4 pinwheel-symmetric rectangular regions</b>. Every
-                other non-hub cell in the current pattern touches at least one accordion pleat or hub-wall
-                crease (<b>green</b>) — the design has no uncreased "flap" cells at any of these grid
-                sizes, unlike an earlier hand-authored sketch of this pattern.
-              </p>
             </div>
           </div>
         </div>
