@@ -4,6 +4,7 @@ import { useAppStore } from "../../store/useAppStore";
 import { Scene } from "../scene/Scene";
 import { ControlPanel } from "../ui/ControlPanel";
 import { PatternView } from "../pattern/PatternView";
+import { CreasePatternAnatomy } from "../anatomy/CreasePatternAnatomy";
 
 function ChevronLeftIcon() {
   return (
@@ -74,6 +75,8 @@ export function AppLayout() {
   const gridDivisions = useAppStore((s) => s.gridDivisions);
   const layerGapRatio = useAppStore((s) => s.layerGapRatio);
   const heightRatio = useAppStore((s) => s.heightRatio);
+  const anatomyOpen = useAppStore((s) => s.anatomyOpen);
+  const setAnatomyOpen = useAppStore((s) => s.setAnatomyOpen);
   const [paneOpen, setPaneOpen] = useState(true);
 
   useEffect(() => {
@@ -177,6 +180,7 @@ export function AppLayout() {
         </div>
         <ControlPanel geometry={geometry} />
       </aside>
+      {anatomyOpen && <CreasePatternAnatomy onClose={() => setAnatomyOpen(false)} />}
     </div>
   );
 }

@@ -803,6 +803,411 @@ input[type="color"]::-webkit-color-swatch {
   border-radius: 2px;
 }
 
+/* --- Crease pattern anatomy (reference view overlay) ----------------------- */
+/* A menu item in the control panel opens this as a full-screen overlay above
+   the app layout. Cell data comes live from GET /api/flasher/anatomy (see
+   backend/app/flasher/anatomy.py), derived from the actual generate_flasher
+   output rather than any hand-authored snapshot. Its cell colors encode
+   crease *kinds*, not app UI state, so they're declared as their own set of
+   custom properties scoped to .anatomy rather than reusing the app-wide
+   tokens — the same way Scene.tsx/CreaseLines.tsx/PatternView.tsx keep their
+   own literal color values instead of reading CSS vars. */
+
+.anatomy-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.anatomy {
+  --a-bg: #1c1b19;
+  --a-pane: #242220;
+  --a-pane-2: #2a2824;
+  --a-line: #3c3934;
+  --a-line-soft: #302e29;
+  --a-text: #ece8e0;
+  --a-text-soft: #a9a396;
+  --a-text-faint: #726c5f;
+  --a-accent: #5b9bff;
+  --a-accent-ink: #eaf1ff;
+  --a-hub: #f2c14e;
+  --a-hub-ink: #3a2d05;
+  --a-diag-main: #5b9bff;
+  --a-diag-main-ink: #eaf1ff;
+  --a-diag-anti: #f2794f;
+  --a-diag-anti-ink: #fff0e9;
+  --a-pleat: #5cb08d;
+  --a-pleat-ink: #eafff5;
+
+  font-family: "Inter", -apple-system, "Segoe UI", Roboto, sans-serif;
+  color: var(--a-text);
+  background: var(--a-bg);
+  border-radius: 14px;
+  box-shadow: var(--shadow-md);
+  width: min(920px, 100%);
+  max-height: 100%;
+  overflow: auto;
+  padding: 24px 24px 32px;
+}
+
+:root[data-theme="light"] .anatomy {
+  --a-bg: #f4f1ea;
+  --a-pane: #ffffff;
+  --a-pane-2: #fbf9f4;
+  --a-line: #ddd7c8;
+  --a-line-soft: #e8e3d6;
+  --a-text: #221f18;
+  --a-text-soft: #6b665a;
+  --a-text-faint: #948e7d;
+  --a-accent: #2f5fd6;
+  --a-accent-ink: #ffffff;
+  --a-hub: #c9860e;
+  --a-hub-ink: #fff8ea;
+  --a-diag-main: #2f5fd6;
+  --a-diag-main-ink: #ffffff;
+  --a-diag-anti: #c1502b;
+  --a-diag-anti-ink: #ffffff;
+  --a-pleat: #1f7a56;
+  --a-pleat-ink: #ffffff;
+}
+
+.anatomy-titlebar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 4px;
+}
+
+.anatomy-titlebar h1 {
+  font-size: 21px;
+  font-weight: 600;
+  margin: 0 0 4px;
+  letter-spacing: -0.01em;
+}
+
+.anatomy-sub {
+  font-size: 13.5px;
+  color: var(--a-text-soft);
+  margin: 0;
+  line-height: 1.5;
+  max-width: 62ch;
+}
+
+.anatomy-close {
+  flex: 0 0 auto;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  border: 1px solid var(--a-line);
+  background: var(--a-pane-2);
+  color: var(--a-text-soft);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.anatomy-close:hover {
+  color: var(--a-text);
+  border-color: var(--a-text-faint);
+}
+
+.anatomy-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px;
+  align-items: center;
+  margin: 18px 0;
+  padding: 12px 14px;
+  background: var(--a-pane);
+  border: 1px solid var(--a-line);
+  border-radius: 10px;
+}
+
+.anatomy-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.anatomy-field-label {
+  font-size: 11.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--a-text-faint);
+  font-weight: 600;
+}
+
+.anatomy-sizes {
+  display: flex;
+  gap: 4px;
+  background: var(--a-pane-2);
+  border: 1px solid var(--a-line);
+  border-radius: 8px;
+  padding: 3px;
+}
+
+.anatomy-sizes button {
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  font-family: var(--mono);
+  color: var(--a-text-soft);
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  padding: 5px 11px;
+  cursor: pointer;
+}
+
+.anatomy-sizes button.active {
+  background: var(--a-accent);
+  color: var(--a-accent-ink);
+}
+
+.anatomy-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--a-text-soft);
+  cursor: pointer;
+  user-select: none;
+}
+
+.anatomy-toggle input {
+  accent-color: var(--a-accent);
+  width: 14px;
+  height: 14px;
+}
+
+.anatomy-stage {
+  display: flex;
+  gap: 24px;
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
+.anatomy-grid-card {
+  background: var(--a-pane);
+  border: 1px solid var(--a-line);
+  border-radius: 12px;
+  padding: 18px;
+  box-shadow: var(--shadow-md);
+  flex: 0 0 auto;
+  min-width: 200px;
+  min-height: 120px;
+}
+
+.anatomy-status {
+  color: var(--a-text-faint);
+  font-size: 13px;
+}
+
+.anatomy-grid-outer {
+  display: inline-grid;
+  gap: 2px;
+}
+
+.anatomy-axis-x,
+.anatomy-axis-y {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--a-text-faint);
+  display: grid;
+  gap: 2px;
+}
+
+.anatomy-axis-x > div,
+.anatomy-axis-y > div {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.anatomy-grid-cells {
+  display: grid;
+  gap: 2px;
+  position: relative;
+}
+
+.anatomy-cell {
+  border-radius: 3px;
+  background: var(--a-pleat);
+  border: 1px solid var(--a-line);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--mono);
+  font-size: 9px;
+  color: var(--a-pleat-ink);
+  transition: transform 0.08s ease;
+  padding: 0;
+  opacity: 0.55;
+}
+
+.anatomy-cell:hover,
+.anatomy-cell:focus-visible {
+  transform: scale(1.14);
+  z-index: 2;
+  outline: 2px solid var(--a-accent);
+  outline-offset: 1px;
+  opacity: 1;
+}
+
+.anatomy-cell.hub {
+  background: var(--a-hub);
+  color: var(--a-hub-ink);
+  border-color: var(--a-hub);
+  font-weight: 600;
+  opacity: 1;
+}
+.anatomy-cell.diag_main {
+  background: var(--a-diag-main);
+  color: var(--a-diag-main-ink);
+  border-color: var(--a-diag-main);
+  opacity: 1;
+}
+.anatomy-cell.diag_anti {
+  background: var(--a-diag-anti);
+  color: var(--a-diag-anti-ink);
+  border-color: var(--a-diag-anti);
+  opacity: 1;
+}
+.anatomy-cell.pleat {
+  opacity: 0.85;
+}
+.anatomy-cell.flap {
+  background: var(--a-line-soft);
+  color: var(--a-text-faint);
+  border-color: var(--a-line);
+  opacity: 1;
+}
+.anatomy-cell.selected {
+  outline: 2px solid var(--a-text);
+  outline-offset: 1px;
+}
+
+.anatomy-diagonals {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.anatomy-diagonals line {
+  stroke: var(--a-text);
+  stroke-width: 1.5;
+  stroke-dasharray: 5 4;
+  opacity: 0.55;
+}
+
+.anatomy-side {
+  flex: 1 1 260px;
+  min-width: 240px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.anatomy-panel {
+  background: var(--a-pane);
+  border: 1px solid var(--a-line);
+  border-radius: 10px;
+  padding: 14px 16px;
+}
+
+.anatomy-panel h2 {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--a-text-faint);
+  margin: 0 0 10px;
+  font-weight: 600;
+}
+
+.anatomy-legend-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 13px;
+  margin-bottom: 8px;
+}
+.anatomy-legend-row:last-child {
+  margin-bottom: 0;
+}
+
+.anatomy-swatch {
+  width: 14px;
+  height: 14px;
+  border-radius: 4px;
+  flex: 0 0 auto;
+  display: inline-block;
+}
+.anatomy-swatch.hub {
+  background: var(--a-hub);
+}
+.anatomy-swatch.diag_main {
+  background: var(--a-diag-main);
+}
+.anatomy-swatch.diag_anti {
+  background: var(--a-diag-anti);
+}
+.anatomy-swatch.pleat {
+  background: var(--a-pleat);
+}
+
+.anatomy-legend-text b {
+  font-weight: 600;
+}
+.anatomy-legend-text span {
+  color: var(--a-text-soft);
+}
+
+.anatomy-detail {
+  min-height: 64px;
+}
+.anatomy-detail-empty {
+  color: var(--a-text-faint);
+  font-size: 13px;
+}
+.anatomy-detail-coord {
+  font-family: var(--mono);
+  font-size: 17px;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+.anatomy-detail-kind {
+  font-size: 13.5px;
+  color: var(--a-text-soft);
+  line-height: 1.5;
+}
+.anatomy-detail-ring {
+  display: inline-block;
+  margin-top: 8px;
+  font-size: 11.5px;
+  color: var(--a-text-faint);
+  background: var(--a-line-soft);
+  border-radius: 5px;
+  padding: 2px 7px;
+  font-family: var(--mono);
+}
+
+.anatomy-note {
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--a-text-soft);
+  margin: 0;
+}
+.anatomy-note b {
+  color: var(--a-text);
+  font-weight: 600;
+}
+
 /* --- Motion --------------------------------------------------------------- */
 
 @keyframes appEnter {

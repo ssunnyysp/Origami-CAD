@@ -4,6 +4,7 @@ import type {
   FlasherParams,
   FlasherPreset,
   FoldImportResponse,
+  PatternAnatomy,
 } from "../model/types";
 
 // Same-origin paths: the Vite dev server proxies /api to the Python backend
@@ -35,6 +36,10 @@ export function fetchGeometry(params: FlasherParams): Promise<FlasherGeometry> {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(params),
   });
+}
+
+export function fetchPatternAnatomy(gridDivisions: number): Promise<PatternAnatomy> {
+  return getJson(`/api/flasher/anatomy?gridDivisions=${gridDivisions}`);
 }
 
 export function importFold(document: unknown, frameIndex?: number): Promise<FoldImportResponse> {

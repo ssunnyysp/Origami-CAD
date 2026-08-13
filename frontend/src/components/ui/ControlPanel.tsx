@@ -18,6 +18,7 @@ interface Props {
 export function ControlPanel({ geometry }: Props) {
   const viewMode = useAppStore((s) => s.viewMode);
   const setViewMode = useAppStore((s) => s.setViewMode);
+  const setAnatomyOpen = useAppStore((s) => s.setAnatomyOpen);
   const showingPattern = viewMode === "pattern";
 
   return (
@@ -50,6 +51,16 @@ export function ControlPanel({ geometry }: Props) {
       <section className="panel-section">
         <h2 className="section-label">FOLD file</h2>
         <FoldImportExport geometry={geometry} />
+      </section>
+
+      <section className="panel-section">
+        <h2 className="section-label">Reference</h2>
+        <button
+          className="action-button action-button--secondary"
+          onClick={() => setAnatomyOpen(true)}
+        >
+          Crease pattern anatomy
+        </button>
       </section>
     </div>
   );
